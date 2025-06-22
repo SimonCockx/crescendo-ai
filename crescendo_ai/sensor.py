@@ -82,9 +82,6 @@ class PresenceSensor:
             self._is_connected = True
             logger.info(f"Connected to presence sensor on {self.port} at {self.baudrate} baud")
 
-            # Start the continuous reading thread
-            self._start_read_thread()
-
             return True
         except serial.SerialException as e:
             logger.error(f"Failed to connect to presence sensor: {e}")
@@ -101,7 +98,7 @@ class PresenceSensor:
         self._is_connected = False
         logger.info("Disconnected from presence sensor")
 
-    def _start_read_thread(self) -> None:
+    def start_reading(self) -> None:
         """Start the continuous reading thread."""
         if self._read_thread is not None and self._thread_running:
             logger.debug("Read thread already running")
@@ -114,7 +111,6 @@ class PresenceSensor:
             name="SensorReadThread"
         )
         self._read_thread.start()
-        logger.debug("Started sensor read thread")
 
     def _stop_read_thread(self) -> None:
         """Stop the continuous reading thread."""
@@ -485,9 +481,6 @@ class PresenceSensor:
             # Send command
             self._serial.write(frame)
             logger.debug(f"Sent command 0x{command_word:04X}: {frame.hex().upper()}")
-
-            # Wait for response
-            time.sleep(0.1)
 
             # Read response header (4 bytes)
             header = self._serial.read(4)

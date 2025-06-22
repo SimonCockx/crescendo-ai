@@ -97,6 +97,8 @@ class CrescendoSystem:
         except Exception as e:
             logger.warning(f"Error configuring sensor: {e} - continuing with default configuration")
 
+        self.sensor.start_reading()
+
         # Initialize relay
         relay_ok = self.relay.connect()
         if not relay_ok:
