@@ -39,7 +39,7 @@ Crescendo AI is a Raspberry Pi-based system that plays background music when som
 
 1. **Presence Sensor**:
    - Connect the 24GHz mmWave sensor to a USB port on the Raspberry Pi using a USB-to-Serial adapter
-   - Default port is `/dev/ttyUSB0` (can be changed with `--sensor-port` option)
+   - Default port is `/dev/ttyAMA0` (can be changed with `--sensor-port` option)
 
 2. **USB Relay**:
    - Connect the USB relay to another USB port on the Raspberry Pi
@@ -53,14 +53,14 @@ Crescendo AI is a Raspberry Pi-based system that plays background music when som
 
 The system supports several command-line options:
 
-- `--sensor-port`: Serial port for the presence sensor (default: `/dev/ttyUSB0`)
+- `--sensor-port`: Serial port for the presence sensor (default: `/dev/ttyAMA0`)
 - `--music-dir`: Directory containing music files (default: `music`)
 - `--check-interval`: Interval in seconds between presence checks (default: `1.0`)
 - `--presence-timeout`: Time in seconds to wait after last detection before stopping music (default: `30.0`)
 
 Example:
 ```bash
-python crescendo.py --sensor-port /dev/ttyUSB1 --music-dir ~/Music --presence-timeout 60.0
+python crescendo.py --sensor-port /dev/ttyAMA0 --music-dir ~/Music --presence-timeout 60.0
 ```
 
 ## Project Structure

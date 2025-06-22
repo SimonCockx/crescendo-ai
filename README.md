@@ -8,7 +8,7 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
 
 ### Components
 
-- **Raspberry Pi 4**: The main controller for the system
+- **Raspberry Pi 3**: The main controller for the system
 - **24GHz mmWave Human Static Presence Sensor**: Connected via serial interface (e.g., Seeed Studio XIAO)
 - **USB Relay**: To control power to the speaker
 - **Speaker**: For audio output
@@ -18,7 +18,7 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
 
 ### Prerequisites
 
-- Raspberry Pi 4 with Raspberry Pi OS installed
+- Raspberry Pi 3 with Raspberry Pi OS installed
 - Python 3.9 or higher
 - Poetry (for dependency management)
 
@@ -26,7 +26,7 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
 
 1. **Presence Sensor**:
    - Connect the 24GHz mmWave sensor to a USB port on the Raspberry Pi using a USB-to-Serial adapter
-   - Note the device path (usually `/dev/ttyUSB0` or similar)
+   - Note the device path (usually `/dev/ttyAMA0` or similar)
 
 2. **USB Relay**:
    - Connect the USB relay to another USB port on the Raspberry Pi
@@ -74,14 +74,14 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
 
 The system supports several command-line options:
 
-- `--sensor-port`: Serial port for the presence sensor (default: `/dev/ttyUSB0`)
+- `--sensor-port`: Serial port for the presence sensor (default: `/dev/ttyAMA0`)
 - `--music-dir`: Directory containing music files (default: `music`)
 - `--check-interval`: Interval in seconds between presence checks (default: `1.0`)
 - `--presence-timeout`: Time in seconds to wait after last detection before stopping music (default: `30.0`)
 
 Example:
 ```bash
-python crescendo.py --sensor-port /dev/ttyUSB1 --music-dir ~/Music --presence-timeout 60.0
+python crescendo.py --sensor-port /dev/ttyAMA0 --music-dir ~/Music --presence-timeout 60.0
 ```
 
 ### Running as a Service

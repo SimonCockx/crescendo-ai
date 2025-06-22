@@ -28,7 +28,7 @@ This document provides essential information for developers working on the Cresc
 
 When deploying on a Raspberry Pi:
 
-1. **Sensor Configuration**: The 24GHz mmWave sensor should be connected via a USB-to-Serial adapter. The default port is `/dev/ttyUSB0`, but this can be configured using the `--sensor-port` option.
+1. **Sensor Configuration**: The 24GHz mmWave sensor should be connected via a USB-to-Serial adapter. The default port is `/dev/ttyAMA0`, but this can be configured using the `--sensor-port` option.
 
 2. **USB Relay Setup**: The USB relay should be connected to a USB port on the Raspberry Pi. No additional configuration is needed as the system automatically detects the relay.
 
