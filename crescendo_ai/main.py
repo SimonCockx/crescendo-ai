@@ -13,8 +13,6 @@ when no presence is detected.
 import logging
 import time
 import os
-import sys
-from typing import Optional
 
 from crescendo_ai.sensor import PresenceSensor
 from crescendo_ai.relay import USBRelay
@@ -40,7 +38,7 @@ class CrescendoSystem:
         sensor_port: str = '/dev/ttyAMA0',
         music_dir: str = 'music',
         check_interval: float = 1.0,
-        presence_timeout: float = 30.0
+        relay_off_delay: float = 15.0 * 60.0,
     ):
         """
         Initialize the Crescendo system.
@@ -49,12 +47,12 @@ class CrescendoSystem:
             sensor_port: Serial port for the presence sensor
             music_dir: Directory containing music files
             check_interval: Interval in seconds between presence checks
-            presence_timeout: Time in seconds to wait after last detection before stopping music
+            relay_off_delay: Delay in seconds before turning off the relay after no presence is detected
         """
         self.sensor_port = sensor_port
         self.music_dir = music_dir
         self.check_interval = check_interval
-        self.presence_timeout = presence_timeout
+        self.relay_off_delay = relay_off_delay
 
         # Initialize components
         self.sensor = PresenceSensor(port=sensor_port)
@@ -63,7 +61,7 @@ class CrescendoSystem:
 
         # State variables
         self.running = False
-        self.last_presence_time: Optional[float] = None
+        self.last_presence_time = None
 
     def initialize(self) -> bool:
         """
@@ -156,37 +154,33 @@ class CrescendoSystem:
             presence_detected = self.sensor.is_presence_detected()
 
             if presence_detected:
-                # Update the last presence time
                 self.last_presence_time = time.time()
 
                 # If music is not playing, turn on relay and start music
-                if not self.audio_player.is_playing():
-                    logger.info("Presence detected - starting music")
+                if self.relay.is_connected() and not self.relay.is_turned_on():
+                    logger.info("Presence detected - turning on relay")
 
                     # Turn on the relay (speaker power)
-                    if self.relay.is_connected():
-                        self.relay.turn_on()
+                    self.relay.turn_on()
+
+                if not self.audio_player.is_playing():
+                    logger.info("Presence detected - starting music")
 
                     # Start playing music
                     self.audio_player.play()
             else:
-                # Check if we should stop music based on timeout
-                if (self.last_presence_time is not None and 
-                    time.time() - self.last_presence_time > self.presence_timeout):
+                # If no presence is detected and music is playing, stop it
+                if self.audio_player.is_playing():
+                    logger.info("No presence detected - stopping music")
 
-                    # If music is playing, stop it and turn off relay
-                    if self.audio_player.is_playing():
-                        logger.info("No presence detected for timeout period - stopping music")
+                    # Stop music
+                    self.audio_player.stop()
 
-                        # Stop music
-                        self.audio_player.stop()
-
-                        # Turn off the relay (speaker power)
-                        if self.relay.is_connected():
-                            self.relay.turn_off()
-
-                        # Reset last presence time
-                        self.last_presence_time = None
+                relay_timeout_is_complete = self.last_presence_time is not None and time.time() - self.last_presence_time > self.relay_off_delay
+                # Turn off the relay (speaker power)
+                if self.relay.is_connected() and self.relay.is_turned_on() and relay_timeout_is_complete:
+                    logger.info("Turning off relay")
+                    self.relay.turn_off()
 
         except Exception as e:
             logger.error(f"Error checking presence: {e}")
@@ -201,7 +195,8 @@ def main():
     parser.add_argument('--sensor-port', default='/dev/ttyAMA0', help='Serial port for the presence sensor')
     parser.add_argument('--music-dir', default='music', help='Directory containing music files')
     parser.add_argument('--check-interval', type=float, default=1.0, help='Interval in seconds between presence checks')
-    parser.add_argument('--presence-timeout', type=float, default=30.0, help='Time in seconds to wait after last detection before stopping music')
+    parser.add_argument('--relay-off-delay', type=float, default=15.0 * 60.0, 
+                        help='Delay in seconds before turning off the relay after no presence is detected (default: 15 minutes)')
 
     args = parser.parse_args()
 
@@ -210,7 +205,7 @@ def main():
         sensor_port=args.sensor_port,
         music_dir=args.music_dir,
         check_interval=args.check_interval,
-        presence_timeout=args.presence_timeout
+        relay_off_delay=args.relay_off_delay
     )
 
     system.run()

@@ -74,7 +74,7 @@ This guide provides the essential steps to quickly set up and run the Crescendo 
 ## Common Command-line Options
 
 ```bash
-python crescendo.py --sensor-port /dev/ttyAMA0 --music-dir ~/Music --presence-timeout 60.0
+python crescendo.py --sensor-port /dev/ttyAMA0 --music-dir ~/Music --relay-off-delay 1800
 ```
 
 For detailed information about:

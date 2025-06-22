@@ -8,8 +8,6 @@ that can switch the power to a connected speaker.
 import usb.core
 import usb.util
 import logging
-import time
-from typing import Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +31,7 @@ class USBRelay:
         self.product_id = product_id
         self._device = None
         self._is_connected = False
+        self.turned_on = False
         
     def connect(self) -> bool:
         """
@@ -101,12 +100,13 @@ class USBRelay:
         if not self.is_connected():
             logger.error("Cannot turn on relay: Device not connected")
             return False
-            
+
         try:
             # Command format depends on the specific USB relay
             # This is a common format, but may need adjustment
             cmd = bytes([0x01, channel, 0x01])
             self._send_command(cmd)
+            self.turned_on = True
             logger.info(f"Turned ON relay channel {channel}")
             return True
         except Exception as e:
@@ -132,11 +132,15 @@ class USBRelay:
             # This is a common format, but may need adjustment
             cmd = bytes([0x01, channel, 0x00])
             self._send_command(cmd)
+            self.turned_on = False
             logger.info(f"Turned OFF relay channel {channel}")
             return True
         except Exception as e:
             logger.error(f"Error turning off relay: {e}")
             return False
+
+    def is_turned_on(self) -> bool:
+        return self.turned_on
     
     def _send_command(self, cmd: bytes) -> None:
         """

@@ -95,11 +95,11 @@ The system supports several command-line options:
 - `--sensor-port`: Serial port for the presence sensor (default: `/dev/ttyAMA0`)
 - `--music-dir`: Directory containing music files (default: `music`)
 - `--check-interval`: Interval in seconds between presence checks (default: `1.0`)
-- `--presence-timeout`: Time in seconds to wait after last detection before stopping music (default: `30.0`)
+- `--relay-off-delay`: Delay in seconds before turning off the relay after no presence is detected (default: `900.0`, which is 15 minutes)
 
 Example:
 ```bash
-python crescendo.py --sensor-port /dev/ttyAMA0 --music-dir ~/Music --presence-timeout 60.0
+python crescendo.py --sensor-port /dev/ttyAMA0 --music-dir ~/Music --relay-off-delay 1800
 ```
 
 ### Running as a Service

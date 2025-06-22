@@ -9,7 +9,8 @@ import serial
 import struct
 import time
 import logging
-from typing import Optional, Tuple, Dict, Any, List
+import threading
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,12 @@ class PresenceSensor:
         self._is_connected = False
         self._last_data: Dict[str, Any] = {}
 
+        # Thread-related attributes
+        self._read_thread: Optional[threading.Thread] = None
+        self._thread_running = False
+        self._presence_detected = False
+        self._thread_lock = threading.Lock()
+
     def connect(self) -> bool:
         """
         Connect to the sensor.
@@ -74,6 +81,10 @@ class PresenceSensor:
             )
             self._is_connected = True
             logger.info(f"Connected to presence sensor on {self.port} at {self.baudrate} baud")
+
+            # Start the continuous reading thread
+            self._start_read_thread()
+
             return True
         except serial.SerialException as e:
             logger.error(f"Failed to connect to presence sensor: {e}")
@@ -82,10 +93,59 @@ class PresenceSensor:
 
     def disconnect(self) -> None:
         """Disconnect from the sensor."""
+        # Stop the reading thread first
+        self._stop_read_thread()
+
         if self._serial and self._serial.is_open:
             self._serial.close()
         self._is_connected = False
         logger.info("Disconnected from presence sensor")
+
+    def _start_read_thread(self) -> None:
+        """Start the continuous reading thread."""
+        if self._read_thread is not None and self._thread_running:
+            logger.debug("Read thread already running")
+            return
+
+        self._thread_running = True
+        self._read_thread = threading.Thread(
+            target=self._read_thread_func,
+            daemon=True,
+            name="SensorReadThread"
+        )
+        self._read_thread.start()
+        logger.debug("Started sensor read thread")
+
+    def _stop_read_thread(self) -> None:
+        """Stop the continuous reading thread."""
+        if self._read_thread is None or not self._thread_running:
+            return
+
+        self._thread_running = False
+        if self._read_thread.is_alive():
+            self._read_thread.join(timeout=2.0)  # Wait up to 2 seconds for thread to end
+        self._read_thread = None
+        logger.debug("Stopped sensor read thread")
+
+    def _read_thread_func(self) -> None:
+        """Thread function that continuously reads from the sensor."""
+        logger.debug("Sensor read thread started")
+
+        while self._thread_running and self.is_connected():
+            try:
+                data = self.read_data()
+
+                # Update the presence state with thread safety
+                with self._thread_lock:
+                    self._presence_detected = bool(data.get('presence', False))
+
+            except Exception as e:
+                logger.error(f"Error in sensor read thread: {e}")
+
+            # Small delay to prevent excessive CPU usage
+            time.sleep(0.1)
+
+        logger.debug("Sensor read thread ended")
 
     def is_connected(self) -> bool:
         """
@@ -484,10 +544,11 @@ class PresenceSensor:
         """
         Check if human presence is detected.
 
+        This method returns the current presence state as detected by the
+        continuous reading thread. It does not perform a direct sensor read.
+
         Returns:
             bool: True if presence detected, False otherwise
         """
-        data = self.read_data()
-        # The sensor indicates presence when target_status > 0
-        # (1=moving, 2=stationary, 3=both)
-        return bool(data.get('presence', False))
+        with self._thread_lock:
+            return self._presence_detected
