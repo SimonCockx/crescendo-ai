@@ -2,6 +2,8 @@
 
 A Raspberry Pi-based system that plays background music when someone is present in a room.
 
+> **Note:** For quick setup instructions, see [GETTING_STARTED.md](GETTING_STARTED.md)
+
 ## Overview
 
 Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Static Presence Sensor to detect human presence in a room. When someone is detected, the system turns on a speaker via a USB relay and plays background music. When no one is detected for a specified period, the music stops and the speaker is turned off to save power.
@@ -20,7 +22,7 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
 
 - Raspberry Pi 3 with Raspberry Pi OS installed
 - Python 3.9 or higher
-- Poetry (for dependency management)
+- Poetry (for dependency management) or pip (alternative for Raspberry Pi)
 
 ### Hardware Setup
 
@@ -44,9 +46,16 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
    cd crescendo-ai
    ```
 
-2. Install dependencies using Poetry:
+2. Install dependencies using either Poetry or pip:
+
+   **Option 1: Using Poetry (recommended for development)**
    ```bash
    poetry install
+   ```
+
+   **Option 2: Using pip (faster setup on Raspberry Pi)**
+   ```bash
+   pip install -r requirements.txt
    ```
 
 3. Create a directory for your music files:
@@ -60,12 +69,21 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
 
 ### Basic Usage
 
+**If you installed with Poetry:**
+
 1. Activate the Poetry environment:
    ```bash
    poetry shell
    ```
 
 2. Run the system:
+   ```bash
+   python crescendo.py
+   ```
+
+**If you installed with pip:**
+
+1. Run the system directly:
    ```bash
    python crescendo.py
    ```
@@ -94,6 +112,8 @@ To run Crescendo AI as a service that starts automatically on boot:
    ```
 
 2. Add the following content (adjust paths as needed):
+
+   **If you installed with Poetry:**
    ```
    [Unit]
    Description=Crescendo AI Music System
@@ -103,6 +123,22 @@ To run Crescendo AI as a service that starts automatically on boot:
    User=pi
    WorkingDirectory=/home/pi/crescendo-ai
    ExecStart=/home/pi/.local/bin/poetry run python /home/pi/crescendo-ai/crescendo.py
+   Restart=on-failure
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   **If you installed with pip:**
+   ```
+   [Unit]
+   Description=Crescendo AI Music System
+   After=network.target
+
+   [Service]
+   User=pi
+   WorkingDirectory=/home/pi/crescendo-ai
+   ExecStart=/usr/bin/python3 /home/pi/crescendo-ai/crescendo.py
    Restart=on-failure
 
    [Install]
