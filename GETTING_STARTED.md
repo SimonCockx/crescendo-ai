@@ -4,7 +4,25 @@ This guide provides the essential steps to quickly set up and run the Crescendo 
 
 ## Quick Setup
 
-1. **Install Dependencies**:
+1. **Set Up a Virtual Environment**:
+
+   Note: This step is only necessary when not using Poetry, since Poetry manages its own virtual environment.
+
+   Create and activate a virtual environment to avoid conflicts with system packages:
+   ```bash
+   # Create a virtual environment
+   python3 -m venv venv
+
+   # Activate the virtual environment
+   # On Linux/macOS:
+   source venv/bin/activate
+   # On Windows:
+   # venv\Scripts\activate
+   ```
+
+   Your command prompt should now show `(venv)` at the beginning, indicating the virtual environment is active.
+
+2. **Install Dependencies**:
 
    **Option 1: Using Poetry** (recommended for development):
    ```bash
@@ -16,13 +34,15 @@ This guide provides the essential steps to quickly set up and run the Crescendo 
    pip install -r requirements.txt
    ```
 
-2. **Add Music**:
+   Note: Always ensure your virtual environment is activated before installing packages with pip.
+
+3. **Add Music**:
    ```bash
    mkdir music
    # Copy your music files to the music directory
    ```
 
-3. **Run the System**:
+4. **Run the System**:
 
    With Poetry:
    ```bash
@@ -34,7 +54,7 @@ This guide provides the essential steps to quickly set up and run the Crescendo 
    python crescendo.py
    ```
 
-4. **Test Without Hardware**:
+5. **Test Without Hardware**:
    If you don't have the hardware components yet:
 
    ```bash
