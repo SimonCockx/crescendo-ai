@@ -21,6 +21,9 @@ class PresenceSensor:
     FRAME_HEADER = b'\xFD\xFC\xFB\xFA'
     FRAME_FOOTER = b'\x04\x03\x02\x01'
 
+    DATA_FRAME_HEADER = b'\xF4\xF3\xF2\xF1'
+    DATA_FRAME_FOOTER = b'\xF8\xF7\xF6\xF5'
+
     # Target state definitions
     TARGET_STATES = {
         0x00: "No target",
@@ -41,7 +44,7 @@ class PresenceSensor:
     CMD_SET_DISTANCE_PARAMS = 0x0060
     CMD_SET_SENSITIVITY = 0x0064
 
-    def __init__(self, port: str = '/dev/ttyAMA0', baudrate: int = 256000, timeout: float = 10.0):
+    def __init__(self, port: str = '/dev/ttyAMA0', baudrate: int = 256000, timeout: float = 1.0):
         """
         Initialize the presence sensor.
 
@@ -164,7 +167,7 @@ class PresenceSensor:
             return {}
 
         # Parse the frame
-        parsed_data = self._parse_frame(*self._read_frame())
+        parsed_data = self._parse_frame(*self._read_frame(self.DATA_FRAME_HEADER, self.DATA_FRAME_FOOTER))
 
         if parsed_data:
             self._last_data = parsed_data
@@ -174,7 +177,7 @@ class PresenceSensor:
         # Return the last successful data or empty dict
         return self._last_data if self._last_data else {}
 
-    def _read_frame(self) -> Tuple[bytes, int]:
+    def _read_frame(self, frame_header: bytes, frame_footer: bytes) -> Tuple[bytes, int]:
         """
         Read frame from the sensor.
 
@@ -198,7 +201,7 @@ class PresenceSensor:
                     # Process complete frames
                     while len(buffer) >= 4:
                         # Look for frame header
-                        header_pos = buffer.find(self.FRAME_HEADER)
+                        header_pos = buffer.find(frame_header)
                         if header_pos == -1:
                             # No header found, keep last 3 bytes in case header is split
                             buffer = buffer[-3:] if len(buffer) > 3 else buffer
@@ -224,7 +227,7 @@ class PresenceSensor:
                         frame = buffer[:total_frame_size]
 
                         # Verify frame footer
-                        if frame[-4:] != self.FRAME_FOOTER:
+                        if frame[-4:] != frame_footer:
                             logger.debug("Invalid frame footer in read_data")
                             # Skip this frame and continue looking
                             buffer = buffer[4:]  # Skip the header and continue
@@ -498,7 +501,7 @@ class PresenceSensor:
             logger.debug(f"Sent command 0x{command_word:04X}: {frame.hex().upper()}")
 
             # Read response header (4 bytes)
-            response_frame, response_length = self._read_frame()
+            response_frame, response_length = self._read_frame(self.FRAME_HEADER, self.FRAME_FOOTER)
             logger.debug(f"Response: {response_frame.hex().upper()}")
 
             # Extract ACK command word and status
