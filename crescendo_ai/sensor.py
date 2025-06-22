@@ -10,7 +10,7 @@ import struct
 import time
 import logging
 import threading
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +163,28 @@ class PresenceSensor:
             logger.error("Cannot read data: Sensor not connected")
             return {}
 
+        # Parse the frame
+        parsed_data = self._parse_frame(*self._read_frame())
+
+        if parsed_data:
+            self._last_data = parsed_data
+            return parsed_data
+
+        # If we got here, we didn't get a complete frame
+        # Return the last successful data or empty dict
+        return self._last_data if self._last_data else {}
+
+    def _read_frame(self) -> Tuple[bytes, int]:
+        """
+        Read frame from the sensor.
+
+        Returns:
+            Tuple[bytes, int]: frame data and frame length
+        """
+        if not self.is_connected():
+            logger.error("Cannot read frame: Sensor not connected")
+            return b'', 0
+
         try:
             buffer = b''
             start_time = time.time()
@@ -209,25 +231,18 @@ class PresenceSensor:
                             continue
 
                         # Parse the frame
-                        parsed_data = self._parse_frame(frame, frame_length)
-
-                        if parsed_data:
-                            self._last_data = parsed_data
-                            return parsed_data
-
-                        # Remove processed frame from buffer
-                        buffer = buffer[total_frame_size:]
+                        return frame, frame_length
 
                 # Small delay to prevent excessive CPU usage
                 time.sleep(0.01)
 
             # If we got here, we didn't get a complete frame
             # Return the last successful data or empty dict
-            return self._last_data if self._last_data else {}
+            return b'', 0
 
         except Exception as e:
             logger.error(f"Error reading from sensor: {e}")
-            return {}
+            return b'', 0
 
     def _parse_frame(self, frame: bytes, data_length: int) -> Dict[str, Any]:
         """
@@ -483,42 +498,11 @@ class PresenceSensor:
             logger.debug(f"Sent command 0x{command_word:04X}: {frame.hex().upper()}")
 
             # Read response header (4 bytes)
-            header = self._serial.read(4)
-            if len(header) < 4:
-                logger.debug("No response header received")
-                return False
-
-            if header != self.FRAME_HEADER:
-                logger.debug(f"Invalid response header: {header.hex().upper()}")
-                return False
-
-            # Read length (2 bytes)
-            length_bytes = self._serial.read(2)
-            if len(length_bytes) < 2:
-                logger.debug("Failed to read length bytes")
-                return False
-
-            data_length = struct.unpack('<H', length_bytes)[0]
-
-            # Read data portion and footer
-            remaining = data_length + 4  # data + footer
-            data_and_footer = self._serial.read(remaining)
-            if len(data_and_footer) < remaining:
-                logger.debug(f"Incomplete response: expected {remaining} bytes, got {len(data_and_footer)}")
-                return False
-
-            # Combine all parts
-            response = header + length_bytes + data_and_footer
-            logger.debug(f"Response: {response.hex().upper()}")
-
-            # Check footer
-            footer = data_and_footer[-4:]
-            if footer != self.FRAME_FOOTER:
-                logger.debug(f"Invalid response footer: {footer.hex().upper()}")
-                return False
+            response_frame, response_length = self._read_frame()
+            logger.debug(f"Response: {response_frame.hex().upper()}")
 
             # Extract ACK command word and status
-            ack_cmd = struct.unpack('<H', response[6:8])[0]
+            ack_cmd = struct.unpack('<H', response_frame[6:8])[0]
             expected_ack = command_word | 0x0100
 
             if ack_cmd != expected_ack:
@@ -526,7 +510,7 @@ class PresenceSensor:
                 return False
 
             # Check status (0 = success, 1 = failure)
-            status = struct.unpack('<H', response[8:10])[0]
+            status = struct.unpack('<H', response_frame[8:10])[0]
             return status == 0
 
         except Exception as e:
