@@ -422,6 +422,7 @@ class PresenceSensor:
 
             # Read response
             response = self._serial.read(1000)  # Read up to 1000 bytes
+            logger.debug(f"Response: {response.hex().upper()}")
             if not response:
                 logger.debug("No response received")
                 return False
@@ -434,7 +435,7 @@ class PresenceSensor:
             # Check frame header and footer
             if (response[:4] != bytes([0xFD, 0xFC, 0xFB, 0xFA]) or
                     response[-4:] != bytes([0x04, 0x03, 0x02, 0x01])):
-                logger.debug(f"Invalid response header or footer. Header: {response[:4].hex().upper()}, footer: {response[-4:].hex().upper()}")
+                logger.debug(f"Invalid response header or footer")
                 return False
 
             # Extract ACK command word and status
