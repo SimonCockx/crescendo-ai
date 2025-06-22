@@ -167,7 +167,7 @@ class PresenceSensor:
             return {}
 
         # Parse the frame
-        parsed_data = self._parse_frame(*self._read_frame(self.DATA_FRAME_HEADER, self.DATA_FRAME_FOOTER))
+        parsed_data = self._parse_data_frame(*self._read_frame(self.DATA_FRAME_HEADER, self.DATA_FRAME_FOOTER))
 
         if parsed_data:
             self._last_data = parsed_data
@@ -177,7 +177,7 @@ class PresenceSensor:
         # Return the last successful data or empty dict
         return self._last_data if self._last_data else {}
 
-    def _read_frame(self, frame_header: bytes, frame_footer: bytes) -> Tuple[bytes, int]:
+    def _read_frame(self, frame_header: bytes, frame_footer: bytes, delay_read = True) -> Tuple[bytes, int]:
         """
         Read frame from the sensor.
 
@@ -236,8 +236,9 @@ class PresenceSensor:
                         # Parse the frame
                         return frame, frame_length
 
-                # Small delay to prevent excessive CPU usage
-                time.sleep(0.01)
+                if delay_read:
+                    # Small delay to prevent excessive CPU usage
+                    time.sleep(0.01)
 
             # If we got here, we didn't get a complete frame
             # Return the last successful data or empty dict
@@ -247,7 +248,7 @@ class PresenceSensor:
             logger.error(f"Error reading from sensor: {e}")
             return b'', 0
 
-    def _parse_frame(self, frame: bytes, data_length: int) -> Dict[str, Any]:
+    def _parse_data_frame(self, frame: bytes, data_length: int) -> Dict[str, Any]:
         """
         Parse a complete frame from the sensor.
 
@@ -269,7 +270,7 @@ class PresenceSensor:
             footer = frame[6+data_length:6+data_length+4]
 
             # Verify header and footer
-            if header != self.FRAME_HEADER or footer != self.FRAME_FOOTER:
+            if header != self.DATA_FRAME_HEADER or footer != self.DATA_FRAME_FOOTER:
                 logger.debug("Invalid frame header or footer")
                 return {}
 
@@ -501,7 +502,7 @@ class PresenceSensor:
             logger.debug(f"Sent command 0x{command_word:04X}: {frame.hex().upper()}")
 
             # Read response header (4 bytes)
-            response_frame, response_length = self._read_frame(self.FRAME_HEADER, self.FRAME_FOOTER)
+            response_frame, response_length = self._read_frame(self.FRAME_HEADER, self.FRAME_FOOTER, False)
             logger.debug(f"Response: {response_frame.hex().upper()}")
 
             # Extract ACK command word and status
