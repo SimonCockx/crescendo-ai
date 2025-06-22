@@ -434,7 +434,7 @@ class PresenceSensor:
             # Check frame header and footer
             if (response[:4] != bytes([0xFD, 0xFC, 0xFB, 0xFA]) or
                     response[-4:] != bytes([0x04, 0x03, 0x02, 0x01])):
-                logger.debug("Invalid response header or footer")
+                logger.debug(f"Invalid response header or footer. Header: {response[:4].hex().upper()}, footer: {response[-4:].hex().upper()}")
                 return False
 
             # Extract ACK command word and status
