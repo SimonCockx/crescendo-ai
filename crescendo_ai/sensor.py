@@ -17,8 +17,8 @@ class PresenceSensor:
     """Class to interface with the 24GHz mmWave Human Static Presence Sensor."""
 
     # Protocol constants
-    FRAME_HEADER = b'\xF4\xF3\xF2\xF1'
-    FRAME_FOOTER = b'\xF8\xF7\xF6\xF5'
+    FRAME_HEADER = b'\xFD\xFC\xFB\xFA'
+    FRAME_FOOTER = b'\x04\x03\x02\x01'
 
     # Target state definitions
     TARGET_STATES = {
@@ -123,7 +123,7 @@ class PresenceSensor:
                         header_pos = buffer.find(self.FRAME_HEADER)
                         if header_pos == -1:
                             # No header found, keep last 3 bytes in case header is split
-                            buffer = buffer[-3:]
+                            buffer = buffer[-3:] if len(buffer) > 3 else buffer
                             break
 
                         # Remove data before header
@@ -142,8 +142,17 @@ class PresenceSensor:
                         if len(buffer) < total_frame_size:
                             break
 
-                        # Extract and parse frame
+                        # Extract frame
                         frame = buffer[:total_frame_size]
+
+                        # Verify frame footer
+                        if frame[-4:] != self.FRAME_FOOTER:
+                            logger.debug("Invalid frame footer in read_data")
+                            # Skip this frame and continue looking
+                            buffer = buffer[4:]  # Skip the header and continue
+                            continue
+
+                        # Parse the frame
                         parsed_data = self._parse_frame(frame, frame_length)
 
                         if parsed_data:
@@ -395,7 +404,7 @@ class PresenceSensor:
             frame = bytearray()
 
             # Frame header
-            frame.extend([0xFD, 0xFC, 0xFB, 0xFA])
+            frame.extend(self.FRAME_HEADER)
 
             # Data length (command word + command data)
             data_length = 2 + len(command_data)
@@ -408,7 +417,7 @@ class PresenceSensor:
             frame.extend(command_data)
 
             # Frame footer
-            frame.extend([0x04, 0x03, 0x02, 0x01])
+            frame.extend(self.FRAME_FOOTER)
 
             # Clear input buffer
             self._serial.reset_input_buffer()
@@ -420,22 +429,39 @@ class PresenceSensor:
             # Wait for response
             time.sleep(0.1)
 
-            # Read response
-            response = self._serial.read(1000)  # Read up to 1000 bytes
+            # Read response header (4 bytes)
+            header = self._serial.read(4)
+            if len(header) < 4:
+                logger.debug("No response header received")
+                return False
+
+            if header != self.FRAME_HEADER:
+                logger.debug(f"Invalid response header: {header.hex().upper()}")
+                return False
+
+            # Read length (2 bytes)
+            length_bytes = self._serial.read(2)
+            if len(length_bytes) < 2:
+                logger.debug("Failed to read length bytes")
+                return False
+
+            data_length = struct.unpack('<H', length_bytes)[0]
+
+            # Read data portion and footer
+            remaining = data_length + 4  # data + footer
+            data_and_footer = self._serial.read(remaining)
+            if len(data_and_footer) < remaining:
+                logger.debug(f"Incomplete response: expected {remaining} bytes, got {len(data_and_footer)}")
+                return False
+
+            # Combine all parts
+            response = header + length_bytes + data_and_footer
             logger.debug(f"Response: {response.hex().upper()}")
-            if not response:
-                logger.debug("No response received")
-                return False
 
-            # Parse ACK response
-            if len(response) < 12:  # Minimum ACK frame size
-                logger.debug("Response too short")
-                return False
-
-            # Check frame header and footer
-            if (response[:4] != bytes([0xFD, 0xFC, 0xFB, 0xFA]) or
-                    response[-4:] != bytes([0x04, 0x03, 0x02, 0x01])):
-                logger.debug(f"Invalid response header or footer")
+            # Check footer
+            footer = data_and_footer[-4:]
+            if footer != self.FRAME_FOOTER:
+                logger.debug(f"Invalid response footer: {footer.hex().upper()}")
                 return False
 
             # Extract ACK command word and status
