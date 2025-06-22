@@ -41,7 +41,7 @@ class PresenceSensor:
     CMD_SET_DISTANCE_PARAMS = 0x0060
     CMD_SET_SENSITIVITY = 0x0064
 
-    def __init__(self, port: str = '/dev/ttyAMA0', baudrate: int = 256000, timeout: float = 1.0):
+    def __init__(self, port: str = '/dev/ttyAMA0', baudrate: int = 256000, timeout: float = 10.0):
         """
         Initialize the presence sensor.
 
