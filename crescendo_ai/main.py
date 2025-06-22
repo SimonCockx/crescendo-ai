@@ -90,7 +90,7 @@ class CrescendoSystem:
                 max_static_gate=8,  # Detect stationary targets up to 6m
                 no_one_duration=10,  # 10 second delay before reporting "no one"
                 motion_sensitivity=[50, 50, 40, 30, 20, 15, 15, 15],  # Per gate
-                static_sensitivity=[0, 0, 40, 40, 30, 30, 20, 20]  # Per gate (0,1 not settable)
+                static_sensitivity=[50, 50, 40, 40, 30, 30, 20, 20]  # Per gate (0,1 not settable)
             )
             if not config_ok:
                 logger.warning("Failed to configure sensor - continuing with default configuration")
