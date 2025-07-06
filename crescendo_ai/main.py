@@ -72,6 +72,7 @@ class CrescendoSystem:
         self.prev_dynamic_detection_active = False
         self.prev_static_detected = False
         self.prev_continuous_detection = False
+        self.prev_presence_detected = False
 
     def initialize(self) -> bool:
         """
@@ -233,7 +234,7 @@ class CrescendoSystem:
                 self.last_presence_time = current_time
 
                 # Log detailed presence detection information
-                if not was_presence_detected:
+                if not self.prev_presence_detected:
                     logger.info("PRESENCE DETECTED: Both conditions met for robust detection")
                     logger.info(f"  - Dynamic detection: {'Continuous motion for 3+ seconds' if continuous_detection else 'Within 5-minute window'}")
                     logger.info(f"  - Static detection: Energy level {self.sensor.get_static_energy()}")
@@ -248,14 +249,20 @@ class CrescendoSystem:
                     logger.info("Robust presence detected - starting music")
                     # Start playing music
                     self.audio_player.play()
+
+                # Update previous presence state
+                self.prev_presence_detected = True
             else:
                 # Log detailed information about why presence was not detected
-                if was_presence_detected:
+                if was_presence_detected and self.prev_presence_detected:
                     logger.info("PRESENCE LOST: Robust detection conditions no longer met")
                     if not dynamic_detection_active:
                         logger.info("  - Dynamic detection inactive: No continuous motion and outside 5-minute window")
                     if not static_detected:
                         logger.info("  - Static detection inactive: No stationary target detected")
+
+                # Always update previous presence state when robust presence is not detected
+                self.prev_presence_detected = False
 
                 # Regular debug logging - only log if state changed
                 if dynamic_detection_active != self.prev_dynamic_detection_active or static_detected != self.prev_static_detected:
