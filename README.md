@@ -8,6 +8,29 @@ A Raspberry Pi-based system that plays background music when someone is present 
 
 Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Static Presence Sensor to detect human presence in a room. When someone is detected, the system turns on a speaker via a USB relay and plays background music. When no one is detected for a specified period, the music stops and the speaker is turned off to save power.
 
+### Detection Algorithm
+
+Crescendo AI uses a robust detection algorithm that combines both static and dynamic presence sensing:
+
+1. **High Sensitivity**: The sensor is configured with high sensitivity (above 70) for all detection gates, ensuring reliable detection up to 6 meters.
+
+2. **Dynamic Detection**: 
+   - The system tracks dynamic (moving) target detections over time
+   - A person is considered dynamically detected if motion is detected continuously for at least 3 seconds
+   - Once detected, dynamic detection remains active for 5 minutes, even if motion temporarily stops
+
+3. **Static Detection**:
+   - The system also monitors for stationary targets using the static detection capability
+   - This helps detect people who are not moving but still present in the room
+
+4. **Robust Presence Detection**:
+   - A person is only considered "present" when BOTH conditions are true:
+     1. Dynamic detection is active (either from continuous detection or within the 5-minute window)
+     2. AND a static target is currently detected
+   - This dual-condition approach prevents false positives and ensures the system only plays music when someone is actually in the room
+
+This algorithm makes the system more robust against false detections and ensures music only plays when someone is actually present in the room.
+
 ### Components
 
 - **Raspberry Pi 3**: The main controller for the system
@@ -35,7 +58,7 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
    - Connect the speaker's power input to the relay's output
    - Set up USB permissions by creating a udev rule:
      ```bash
-     sudo nano /etc/udev/rules.d/50-usb-relay.rules
+     sudo nano /etc/udev/rules.d/99-usb-relay.rules
      ```
    - Add the following line to the file:
      ```

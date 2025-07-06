@@ -63,6 +63,11 @@ class CrescendoSystem:
         self.running = False
         self.last_presence_time = None
 
+        # Dynamic detection state variables
+        self.dynamic_detection_history = []  # List of timestamps when dynamic motion was detected
+        self.dynamic_detection_active_until = None  # Timestamp until dynamic detection is considered active
+        self.dynamic_detection_duration = 300  # Duration in seconds (5 minutes) to keep dynamic detection active
+
     def initialize(self) -> bool:
         """
         Initialize all system components.
@@ -89,8 +94,8 @@ class CrescendoSystem:
                 max_motion_gate=8,  # Detect motion up to 6m
                 max_static_gate=8,  # Detect stationary targets up to 6m
                 no_one_duration=10,  # 10 second delay before reporting "no one"
-                motion_sensitivity=[50, 50, 40, 30, 20, 15, 15, 15],  # Per gate
-                static_sensitivity=[50, 50, 40, 40, 30, 30, 20, 20]  # Per gate (0,1 not settable)
+                motion_sensitivity=[80, 80, 75, 75, 75, 70, 70, 70],  # Per gate
+                static_sensitivity=[80, 80, 75, 75, 75, 70, 70, 70]  # Per gate (0,1 not settable)
             )
             if not config_ok:
                 logger.warning("Failed to configure sensor - continuing with default configuration")
@@ -151,35 +156,68 @@ class CrescendoSystem:
             self.shutdown()
 
     def _check_presence_and_update(self) -> None:
-        """Check for presence and update system state accordingly."""
+        """Check for presence and update system state accordingly using the robust detection algorithm."""
         try:
-            presence_detected = self.sensor.is_presence_detected()
+            current_time = time.time()
 
-            if presence_detected:
-                self.last_presence_time = time.time()
+            # Check for dynamic (moving) target
+            dynamic_detected = self.sensor.is_moving_target_detected()
+
+            # Update dynamic detection history
+            if dynamic_detected:
+                self.dynamic_detection_history.append(current_time)
+
+            # Remove entries older than 3 seconds from history
+            self.dynamic_detection_history = [t for t in self.dynamic_detection_history 
+                                             if current_time - t <= 3.0]
+
+            # Check if we have continuous dynamic detection for 3 seconds
+            dynamic_detection_active = False
+            if len(self.dynamic_detection_history) >= 3:
+                # If we have at least 3 detections in the last 3 seconds, activate dynamic detection
+                dynamic_detection_active = True
+                # Set the dynamic detection to be active for the next 5 minutes
+                self.dynamic_detection_active_until = current_time + self.dynamic_detection_duration
+                logger.debug(f"Dynamic detection activated until {time.ctime(self.dynamic_detection_active_until)}")
+            elif self.dynamic_detection_active_until and current_time < self.dynamic_detection_active_until:
+                # Dynamic detection is still active from a previous detection
+                dynamic_detection_active = True
+                logger.debug(f"Dynamic detection still active (expires: {time.ctime(self.dynamic_detection_active_until)})")
+
+            # Check for static target
+            static_detected = self.sensor.is_static_target_detected()
+
+            # Robust presence detection: both dynamic detection must be active AND static target must be detected
+            robust_presence_detected = dynamic_detection_active and static_detected
+
+            if robust_presence_detected:
+                self.last_presence_time = current_time
+                logger.debug(f"Robust presence detected - Dynamic: {dynamic_detection_active}, Static: {static_detected}")
 
                 # If music is not playing, turn on relay and start music
                 if self.relay.is_connected() and not self.relay.is_turned_on():
-                    logger.info("Presence detected - turning on relay")
-
+                    logger.info("Robust presence detected - turning on relay")
                     # Turn on the relay (speaker power)
                     self.relay.turn_on()
 
                 if not self.audio_player.is_playing():
-                    logger.info("Presence detected - starting music")
-
+                    logger.info("Robust presence detected - starting music")
                     # Start playing music
                     self.audio_player.play()
             else:
-                # If no presence is detected and music is playing, stop it
-                if self.audio_player.is_playing():
-                    logger.info("No presence detected - stopping music")
+                # Log the detection state for debugging
+                logger.debug(f"No robust presence - Dynamic: {dynamic_detection_active}, Static: {static_detected}")
 
+                # If no robust presence is detected and music is playing, stop it
+                if self.audio_player.is_playing():
+                    logger.info("No robust presence detected - stopping music")
                     # Stop music
                     self.audio_player.stop()
 
-                relay_timeout_is_complete = self.last_presence_time is not None and time.time() - self.last_presence_time > self.relay_off_delay
-                # Turn off the relay (speaker power)
+                relay_timeout_is_complete = (self.last_presence_time is not None and 
+                                           current_time - self.last_presence_time > self.relay_off_delay)
+
+                # Turn off the relay (speaker power) after the delay
                 if self.relay.is_connected() and self.relay.is_turned_on() and relay_timeout_is_complete:
                     logger.info("Turning off relay")
                     self.relay.turn_off()

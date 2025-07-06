@@ -539,3 +539,47 @@ class PresenceSensor:
         """
         with self._thread_lock:
             return self._presence_detected
+
+    def is_static_target_detected(self) -> bool:
+        """
+        Check if a stationary target is detected.
+
+        Returns:
+            bool: True if a stationary target is detected, False otherwise
+        """
+        with self._thread_lock:
+            target_status = self._last_data.get('target_status', 0)
+            # Target status 0x02 (stationary) or 0x03 (moving & stationary)
+            return target_status in [0x02, 0x03]
+
+    def is_moving_target_detected(self) -> bool:
+        """
+        Check if a moving target is detected.
+
+        Returns:
+            bool: True if a moving target is detected, False otherwise
+        """
+        with self._thread_lock:
+            target_status = self._last_data.get('target_status', 0)
+            # Target status 0x01 (moving) or 0x03 (moving & stationary)
+            return target_status in [0x01, 0x03]
+
+    def get_static_energy(self) -> int:
+        """
+        Get the energy level of the static target.
+
+        Returns:
+            int: Energy level (0-100) of the static target, or 0 if no static target
+        """
+        with self._thread_lock:
+            return self._last_data.get('static_energy', 0)
+
+    def get_move_energy(self) -> int:
+        """
+        Get the energy level of the moving target.
+
+        Returns:
+            int: Energy level (0-100) of the moving target, or 0 if no moving target
+        """
+        with self._thread_lock:
+            return self._last_data.get('move_energy', 0)
