@@ -68,6 +68,11 @@ class CrescendoSystem:
         self.dynamic_detection_active_until = None  # Timestamp until dynamic detection is considered active
         self.dynamic_detection_duration = 300  # Duration in seconds (5 minutes) to keep dynamic detection active
 
+        # State tracking for logging
+        self.prev_dynamic_detection_active = False
+        self.prev_static_detected = False
+        self.prev_continuous_detection = False
+
     def initialize(self) -> bool:
         """
         Initialize all system components.
@@ -180,21 +185,43 @@ class CrescendoSystem:
                 dynamic_detection_active = True
                 # Set the dynamic detection to be active for the next 5 minutes
                 self.dynamic_detection_active_until = current_time + self.dynamic_detection_duration
-                logger.debug(f"Dynamic detection activated: continuous motion detected for 3+ seconds (active until {time.ctime(self.dynamic_detection_active_until)})")
+                # Log only if this is a new continuous detection
+                if not self.prev_continuous_detection:
+                    logger.debug(f"Dynamic detection activated: continuous motion detected for 3+ seconds (active until {time.ctime(self.dynamic_detection_active_until)})")
+                    self.prev_continuous_detection = True
             elif self.dynamic_detection_active_until and current_time < self.dynamic_detection_active_until:
                 # Dynamic detection is still active from a previous detection
                 dynamic_detection_active = True
-                remaining_time = int(self.dynamic_detection_active_until - current_time)
-                logger.debug(f"Dynamic detection still active: within 5-minute window (expires in {remaining_time} seconds)")
+                # No need to log this every second - it's redundant information
             else:
-                logger.debug(f"Dynamic detection inactive: no continuous motion detected and not within 5-minute window")
+                # Log only if dynamic detection was previously active
+                if self.prev_dynamic_detection_active:
+                    logger.debug(f"Dynamic detection inactive: no continuous motion detected and not within 5-minute window")
+                self.prev_continuous_detection = False
 
             # Check for static target
             static_detected = self.sensor.is_static_target_detected()
-            if static_detected:
-                logger.debug(f"Static target detected: energy level {self.sensor.get_static_energy()}")
-            else:
-                logger.debug(f"No static target detected")
+
+            # Reset dynamic detection if no static target is detected
+            if not static_detected:
+                # Only log if this is a change from the previous state
+                if self.dynamic_detection_active_until is not None:
+                    logger.debug("Resetting dynamic detection because no static target is detected")
+                self.dynamic_detection_history = []
+                self.dynamic_detection_active_until = None
+                dynamic_detection_active = False
+
+            # Update previous dynamic detection state
+            if dynamic_detection_active != self.prev_dynamic_detection_active:
+                self.prev_dynamic_detection_active = dynamic_detection_active
+
+            # Log static detection status only if it changed
+            if static_detected != self.prev_static_detected:
+                if static_detected:
+                    logger.debug(f"Static target detected: energy level {self.sensor.get_static_energy()}")
+                else:
+                    logger.debug(f"No static target detected")
+                self.prev_static_detected = static_detected
 
             # Robust presence detection: both dynamic detection must be active AND static target must be detected
             robust_presence_detected = dynamic_detection_active and static_detected
@@ -230,8 +257,9 @@ class CrescendoSystem:
                     if not static_detected:
                         logger.info("  - Static detection inactive: No stationary target detected")
 
-                # Regular debug logging
-                logger.debug(f"No robust presence - Dynamic: {dynamic_detection_active}, Static: {static_detected}")
+                # Regular debug logging - only log if state changed
+                if dynamic_detection_active != self.prev_dynamic_detection_active or static_detected != self.prev_static_detected:
+                    logger.debug(f"No robust presence - Dynamic: {dynamic_detection_active}, Static: {static_detected}")
 
                 # If no robust presence is detected and music is playing, stop it
                 if self.audio_player.is_playing():
