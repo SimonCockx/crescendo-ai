@@ -1,12 +1,6 @@
-"""
-Module for controlling a USB relay to turn on/off a speaker.
+"""Class for controlling a USB relay device."""
 
-This module provides functionality to control a USB relay device
-that can switch the power to a connected speaker.
-"""
-
-import usb.core
-import usb.util
+import hid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +9,6 @@ class USBRelay:
     """Class to control a USB relay device."""
     
     # Default USB relay vendor and product IDs
-    # These may need to be adjusted based on the specific USB relay used
     DEFAULT_VENDOR_ID = 0x16c0
     DEFAULT_PRODUCT_ID = 0x05df
     
@@ -41,39 +34,20 @@ class USBRelay:
             bool: True if connection successful, False otherwise
         """
         try:
-            # Find the USB device
-            self._device = usb.core.find(idVendor=self.vendor_id, idProduct=self.product_id)
-            
-            if self._device is None:
-                logger.error(f"USB relay device not found (VID:{self.vendor_id:04x}, PID:{self.product_id:04x})")
-                return False
-                
-            # If the device is in use by the kernel, detach it
-            if self._device.is_kernel_driver_active(0):
-                try:
-                    self._device.detach_kernel_driver(0)
-                except usb.core.USBError as e:
-                    logger.error(f"Could not detach kernel driver: {e}")
-                    return False
-            
-            # Set the active configuration
-            try:
-                self._device.set_configuration()
-            except usb.core.USBError as e:
-                logger.error(f"Could not set configuration: {e}")
-                return False
-                
+            self._device = hid.Device(vid=self.vendor_id, pid=self.product_id)
             self._is_connected = True
             logger.info("Connected to USB relay device")
             return True
             
-        except usb.core.USBError as e:
-            logger.error(f"USB error when connecting to relay: {e}")
+        except (IOError, OSError) as e:
+            logger.error(f"Error connecting to USB relay device: {e}")
             self._is_connected = False
             return False
     
     def disconnect(self) -> None:
         """Disconnect from the USB relay device."""
+        if self._device:
+            self._device.close()
         self._device = None
         self._is_connected = False
         logger.info("Disconnected from USB relay device")
@@ -102,10 +76,10 @@ class USBRelay:
             return False
 
         try:
-            # Command format depends on the specific USB relay
-            # This is a common format, but may need adjustment
-            cmd = bytes([0x01, channel, 0x01])
-            self._send_command(cmd)
+            # For this specific relay, channel 1 = 0x00, channel 2 = 0x01
+            relay_channel = channel - 1
+            cmd = bytes([0xFF, 0x01, relay_channel])
+            self._device.write(cmd)
             self.turned_on = True
             logger.info(f"Turned ON relay channel {channel}")
             return True
@@ -128,10 +102,10 @@ class USBRelay:
             return False
             
         try:
-            # Command format depends on the specific USB relay
-            # This is a common format, but may need adjustment
-            cmd = bytes([0x01, channel, 0x00])
-            self._send_command(cmd)
+            # For this specific relay, channel 1 = 0x00, channel 2 = 0x01
+            relay_channel = channel - 1
+            cmd = bytes([0xFF, 0x00, relay_channel])
+            self._device.write(cmd)
             self.turned_on = False
             logger.info(f"Turned OFF relay channel {channel}")
             return True
@@ -140,21 +114,10 @@ class USBRelay:
             return False
 
     def is_turned_on(self) -> bool:
-        return self.turned_on
-    
-    def _send_command(self, cmd: bytes) -> None:
         """
-        Send a command to the USB relay.
+        Check if the relay is currently turned on.
         
-        Args:
-            cmd: Command bytes to send
+        Returns:
+            bool: True if the relay is on, False otherwise
         """
-        # The endpoint and request type may vary depending on the specific USB relay
-        # These are common values, but may need adjustment
-        self._device.ctrl_transfer(
-            bmRequestType=0x21,  # Host to device, class, interface
-            bRequest=0x09,       # SET_REPORT
-            wValue=0x0300,       # Report type and ID
-            wIndex=0,            # Interface
-            data_or_wLength=cmd  # Command data
-        )
+        return self.turned_on

@@ -33,6 +33,19 @@ Crescendo AI is a smart music player system that uses a 24GHz mmWave Human Stati
 2. **USB Relay**:
    - Connect the USB relay to another USB port on the Raspberry Pi
    - Connect the speaker's power input to the relay's output
+   - Set up USB permissions by creating a udev rule:
+     ```bash
+     sudo nano /etc/udev/rules.d/50-usb-relay.rules
+     ```
+   - Add the following line to the file:
+     ```
+     SUBSYSTEM=="hidraw", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="05df", MODE="0666"
+     ```
+   - Apply the new rule:
+     ```bash
+     sudo udevadm control --reload-rules
+     sudo udevadm trigger
+     ```
 
 3. **Speaker**:
    - Connect the speaker's audio input to the Raspberry Pi's audio output (3.5mm jack or HDMI)
