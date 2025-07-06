@@ -459,6 +459,12 @@ class PresenceSensor:
                 pass
             return False
 
+    def restart(self) -> bool:
+        """Restart the sensor."""
+        if not self.is_connected():
+            logger.error("Cannot restart sensor: Not connected")
+        return self._send_command(0x00A3)
+
     def _send_command(self, command_word: int, command_data: bytes = b'') -> bool:
         """
         Send a command to the sensor and wait for ACK response.

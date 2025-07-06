@@ -76,9 +76,7 @@ class USBRelay:
             return False
 
         try:
-            # For this specific relay, channel 1 = 0x00, channel 2 = 0x01
-            relay_channel = channel - 1
-            cmd = bytes([0xFF, 0x01, relay_channel])
+            cmd = bytes([0x00, 0xFF, channel])
             self._device.write(cmd)
             self.turned_on = True
             logger.info(f"Turned ON relay channel {channel}")
@@ -102,9 +100,7 @@ class USBRelay:
             return False
             
         try:
-            # For this specific relay, channel 1 = 0x00, channel 2 = 0x01
-            relay_channel = channel - 1
-            cmd = bytes([0xFF, 0x00, relay_channel])
+            cmd = bytes([0x00, 0xFD, channel])
             self._device.write(cmd)
             self.turned_on = False
             logger.info(f"Turned OFF relay channel {channel}")
