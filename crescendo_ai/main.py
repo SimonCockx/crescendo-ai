@@ -173,26 +173,43 @@ class CrescendoSystem:
 
             # Check if we have continuous dynamic detection for 3 seconds
             dynamic_detection_active = False
-            if len(self.dynamic_detection_history) >= 3:
+            continuous_detection = len(self.dynamic_detection_history) >= 3
+
+            if continuous_detection:
                 # If we have at least 3 detections in the last 3 seconds, activate dynamic detection
                 dynamic_detection_active = True
                 # Set the dynamic detection to be active for the next 5 minutes
                 self.dynamic_detection_active_until = current_time + self.dynamic_detection_duration
-                logger.debug(f"Dynamic detection activated until {time.ctime(self.dynamic_detection_active_until)}")
+                logger.debug(f"Dynamic detection activated: continuous motion detected for 3+ seconds (active until {time.ctime(self.dynamic_detection_active_until)})")
             elif self.dynamic_detection_active_until and current_time < self.dynamic_detection_active_until:
                 # Dynamic detection is still active from a previous detection
                 dynamic_detection_active = True
-                logger.debug(f"Dynamic detection still active (expires: {time.ctime(self.dynamic_detection_active_until)})")
+                remaining_time = int(self.dynamic_detection_active_until - current_time)
+                logger.debug(f"Dynamic detection still active: within 5-minute window (expires in {remaining_time} seconds)")
+            else:
+                logger.debug(f"Dynamic detection inactive: no continuous motion detected and not within 5-minute window")
 
             # Check for static target
             static_detected = self.sensor.is_static_target_detected()
+            if static_detected:
+                logger.debug(f"Static target detected: energy level {self.sensor.get_static_energy()}")
+            else:
+                logger.debug(f"No static target detected")
 
             # Robust presence detection: both dynamic detection must be active AND static target must be detected
             robust_presence_detected = dynamic_detection_active and static_detected
 
+            # Track previous state to detect changes
+            was_presence_detected = self.last_presence_time is not None and (current_time - self.last_presence_time) < self.relay_off_delay
+
             if robust_presence_detected:
                 self.last_presence_time = current_time
-                logger.debug(f"Robust presence detected - Dynamic: {dynamic_detection_active}, Static: {static_detected}")
+
+                # Log detailed presence detection information
+                if not was_presence_detected:
+                    logger.info("PRESENCE DETECTED: Both conditions met for robust detection")
+                    logger.info(f"  - Dynamic detection: {'Continuous motion for 3+ seconds' if continuous_detection else 'Within 5-minute window'}")
+                    logger.info(f"  - Static detection: Energy level {self.sensor.get_static_energy()}")
 
                 # If music is not playing, turn on relay and start music
                 if self.relay.is_connected() and not self.relay.is_turned_on():
@@ -205,7 +222,15 @@ class CrescendoSystem:
                     # Start playing music
                     self.audio_player.play()
             else:
-                # Log the detection state for debugging
+                # Log detailed information about why presence was not detected
+                if was_presence_detected:
+                    logger.info("PRESENCE LOST: Robust detection conditions no longer met")
+                    if not dynamic_detection_active:
+                        logger.info("  - Dynamic detection inactive: No continuous motion and outside 5-minute window")
+                    if not static_detected:
+                        logger.info("  - Static detection inactive: No stationary target detected")
+
+                # Regular debug logging
                 logger.debug(f"No robust presence - Dynamic: {dynamic_detection_active}, Static: {static_detected}")
 
                 # If no robust presence is detected and music is playing, stop it
@@ -219,7 +244,7 @@ class CrescendoSystem:
 
                 # Turn off the relay (speaker power) after the delay
                 if self.relay.is_connected() and self.relay.is_turned_on() and relay_timeout_is_complete:
-                    logger.info("Turning off relay")
+                    logger.info(f"Turning off relay after {int(self.relay_off_delay/60)} minutes of no presence")
                     self.relay.turn_off()
 
         except Exception as e:
