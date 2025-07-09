@@ -53,6 +53,9 @@ class AudioPlayer:
             bool: True if initialization successful, False otherwise
         """
         try:
+            # Initialize pygame with a dummy video system to support event handling
+            pygame.init()
+            # Initialize the mixer specifically for audio
             pygame.mixer.init()
             self._is_initialized = True
             logger.info("Audio player initialized")
@@ -76,6 +79,7 @@ class AudioPlayer:
             if self._is_playing:
                 self.stop()
             pygame.mixer.quit()
+            pygame.quit()  # Quit pygame completely
             self._is_initialized = False
             logger.info("Audio player shut down")
 
@@ -245,11 +249,22 @@ class AudioPlayer:
         if not self._is_initialized or not self._is_playing:
             return
 
-        # Check for the end-of-track event
-        for event in pygame.event.get():
-            if event.type == pygame.USEREVENT:
-                logger.debug("Track ended, playing next track")
-                self.play_next_track()
+        try:
+            # Check for the end-of-track event
+            for event in pygame.event.get():
+                if event.type == pygame.USEREVENT:
+                    logger.debug("Track ended, playing next track")
+                    self.play_next_track()
+        except Exception as e:
+            logger.error(f"Error checking for track end: {e}")
+            # If we get a "video system not initialized" error, try to reinitialize pygame
+            if "video system not initialized" in str(e):
+                logger.warning("Attempting to reinitialize pygame...")
+                try:
+                    pygame.init()
+                    logger.info("Successfully reinitialized pygame")
+                except Exception as reinit_error:
+                    logger.error(f"Failed to reinitialize pygame: {reinit_error}")
 
     def stop(self) -> bool:
         """
