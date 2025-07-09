@@ -480,52 +480,73 @@ class PresenceSensor:
             logger.error("Cannot send command: Sensor not connected")
             return False
 
-        try:
-            # Create command frame
-            frame = bytearray()
+        # Flag to track if we've already retried
+        retry_attempted = False
 
-            # Frame header
-            frame.extend(self.FRAME_HEADER)
+        while True:
+            try:
+                # Create command frame
+                frame = bytearray()
 
-            # Data length (command word + command data)
-            data_length = 2 + len(command_data)
-            frame.extend(struct.pack('<H', data_length))
+                # Frame header
+                frame.extend(self.FRAME_HEADER)
 
-            # Command word (little endian)
-            frame.extend(struct.pack('<H', command_word))
+                # Data length (command word + command data)
+                data_length = 2 + len(command_data)
+                frame.extend(struct.pack('<H', data_length))
 
-            # Command data
-            frame.extend(command_data)
+                # Command word (little endian)
+                frame.extend(struct.pack('<H', command_word))
 
-            # Frame footer
-            frame.extend(self.FRAME_FOOTER)
+                # Command data
+                frame.extend(command_data)
 
-            # Clear input buffer
-            self._serial.reset_input_buffer()
+                # Frame footer
+                frame.extend(self.FRAME_FOOTER)
 
-            # Send command
-            self._serial.write(frame)
-            logger.debug(f"Sent command 0x{command_word:04X}: {frame.hex().upper()}")
+                # Clear input buffer
+                self._serial.reset_input_buffer()
 
-            # Read response header (4 bytes)
-            response_frame, response_length = self._read_frame(self.FRAME_HEADER, self.FRAME_FOOTER, False)
-            logger.debug(f"Response: {response_frame.hex().upper()}")
+                # Send command
+                self._serial.write(frame)
+                logger.debug(f"Sent command 0x{command_word:04X}: {frame.hex().upper()}")
 
-            # Extract ACK command word and status
-            ack_cmd = struct.unpack('<H', response_frame[6:8])[0]
-            expected_ack = command_word | 0x0100
+                # Read response header (4 bytes)
+                response_frame, response_length = self._read_frame(self.FRAME_HEADER, self.FRAME_FOOTER, False)
+                logger.debug(f"Response: {response_frame.hex().upper()}")
 
-            if ack_cmd != expected_ack:
-                logger.debug(f"Unexpected ACK command: 0x{ack_cmd:04X}, expected: 0x{expected_ack:04X}")
+                # Extract ACK command word and status
+                ack_cmd = struct.unpack('<H', response_frame[6:8])[0]
+                expected_ack = command_word | 0x0100
+
+                if ack_cmd != expected_ack:
+                    logger.debug(f"Unexpected ACK command: 0x{ack_cmd:04X}, expected: 0x{expected_ack:04X}")
+                    return False
+
+                # Check status (0 = success, 1 = failure)
+                status = struct.unpack('<H', response_frame[8:10])[0]
+                return status == 0
+
+            except struct.error as e:
+                if "unpack requires a buffer of 2 bytes" in str(e) and not retry_attempted:
+                    logger.warning("Encountered 'unpack requires a buffer of 2 bytes' error. Restarting sensor and retrying...")
+                    retry_attempted = True
+
+                    # Restart the sensor
+                    self.restart()
+
+                    # Wait a bit before retrying
+                    time.sleep(2.0)
+
+                    # Continue to retry
+                    continue
+                else:
+                    # Either it's a different error or we've already retried
+                    logger.error(f"Error sending command: {e}")
+                    return False
+            except Exception as e:
+                logger.error(f"Error sending command: {e}")
                 return False
-
-            # Check status (0 = success, 1 = failure)
-            status = struct.unpack('<H', response_frame[8:10])[0]
-            return status == 0
-
-        except Exception as e:
-            logger.error(f"Error sending command: {e}")
-            return False
 
     def is_presence_detected(self) -> bool:
         """
