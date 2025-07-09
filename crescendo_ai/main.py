@@ -39,6 +39,7 @@ class CrescendoSystem:
         music_dir: str = 'music',
         check_interval: float = 1.0,
         relay_off_delay: float = 15.0 * 60.0,
+        config_path: str = None,
     ):
         """
         Initialize the Crescendo system.
@@ -48,16 +49,18 @@ class CrescendoSystem:
             music_dir: Directory containing music files
             check_interval: Interval in seconds between presence checks
             relay_off_delay: Delay in seconds before turning off the relay after no presence is detected
+            config_path: Path to the music configuration file. If None, will look for music_config.yaml in music_dir.
         """
         self.sensor_port = sensor_port
         self.music_dir = music_dir
         self.check_interval = check_interval
         self.relay_off_delay = relay_off_delay
+        self.config_path = config_path if config_path else os.path.join(music_dir, "music_config.yaml")
 
         # Initialize components
         self.sensor = PresenceSensor(port=sensor_port)
         self.relay = USBRelay()
-        self.audio_player = AudioPlayer(music_dir=music_dir)
+        self.audio_player = AudioPlayer(music_dir=music_dir, config_path=self.config_path)
 
         # State variables
         self.running = False
@@ -247,8 +250,11 @@ class CrescendoSystem:
 
                 if not self.audio_player.is_playing():
                     logger.info("Robust presence detected - starting music")
-                    # Start playing music
+                    # Start playing music using the configured playlist system
                     self.audio_player.play()
+                else:
+                    # Check if the current track has ended and play the next track if needed
+                    self.audio_player.check_for_track_end()
 
                 # Update previous presence state
                 self.prev_presence_detected = True
@@ -297,6 +303,8 @@ def main():
     parser.add_argument('--check-interval', type=float, default=1.0, help='Interval in seconds between presence checks')
     parser.add_argument('--relay-off-delay', type=float, default=15.0 * 60.0, 
                         help='Delay in seconds before turning off the relay after no presence is detected (default: 15 minutes)')
+    parser.add_argument('--config-path', default=None, 
+                        help='Path to the music configuration file. If not provided, will look for music_config.yaml in the music directory')
 
     args = parser.parse_args()
 
@@ -305,7 +313,8 @@ def main():
         sensor_port=args.sensor_port,
         music_dir=args.music_dir,
         check_interval=args.check_interval,
-        relay_off_delay=args.relay_off_delay
+        relay_off_delay=args.relay_off_delay,
+        config_path=args.config_path
     )
 
     system.run()

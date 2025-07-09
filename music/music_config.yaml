@@ -1,0 +1,48 @@
+# Crescendo AI Music Configuration
+
+# Playlists
+playlists:
+  # A playlist with a name and an ordered list of paths to audio files
+  morning_playlist:
+    tracks:
+      - "music/track1.mp3"
+      - "music/track2.mp3"
+      - "music/track3.mp3"
+  
+  # A playlist that points to a directory (all files in alphabetical order)
+  afternoon_playlist:
+    directory: "music/afternoon"
+  
+  # A single song as a playlist
+  evening_song:
+    tracks:
+      - "music/evening_track.mp3"
+  
+  # Default playlist (used when no playlist is scheduled)
+  default:
+    directory: "music"
+
+# Schedules
+schedules:
+  # Schedule by day of week (0 = Monday, 6 = Sunday)
+  - days: [0, 1, 2, 3, 4]  # Weekdays
+    hours: [7, 8, 9, 10, 11]  # Morning hours
+    playlist: "morning_playlist"
+  
+  - days: [0, 1, 2, 3, 4]  # Weekdays
+    hours: [12, 13, 14, 15, 16, 17]  # Afternoon hours
+    playlist: "afternoon_playlist"
+  
+  - days: [0, 1, 2, 3, 4]  # Weekdays
+    hours: [18, 19, 20, 21, 22, 23]  # Evening hours
+    playlist: "evening_song"
+  
+  # Weekend schedule
+  - days: [5, 6]  # Weekend
+    hours: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "afternoon_playlist"
+  
+  # Specific date and time range
+  - date: "2023-12-25"  # Christmas
+    hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "christmas_playlist"

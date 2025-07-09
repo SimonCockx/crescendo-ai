@@ -132,11 +132,129 @@ The system supports several command-line options:
 - `--music-dir`: Directory containing music files (default: `music`)
 - `--check-interval`: Interval in seconds between presence checks (default: `1.0`)
 - `--relay-off-delay`: Delay in seconds before turning off the relay after no presence is detected (default: `900.0`, which is 15 minutes)
+- `--config-path`: Path to the music configuration file (default: `music/music_config.yaml`)
 
 Example:
 ```bash
-python crescendo.py --sensor-port /dev/ttyAMA0 --music-dir ~/Music --relay-off-delay 1800
+python crescendo.py --sensor-port /dev/ttyAMA0 --music-dir ~/Music --relay-off-delay 1800 --config-path ~/Music/my_config.yaml
 ```
+
+### Playlists and Scheduling
+
+Crescendo AI supports playlists and scheduling through a YAML configuration file. This allows you to define which music should be played at specific times.
+
+#### Configuration File
+
+By default, the system looks for a configuration file named `music_config.yaml` in the music directory. You can specify a different file using the `--config-path` option.
+
+Here's an example configuration file:
+
+```yaml
+# Playlists
+playlists:
+  # A playlist with a name and an ordered list of paths to audio files
+  morning_playlist:
+    tracks:
+      - "music/track1.mp3"
+      - "music/track2.mp3"
+      - "music/track3.mp3"
+
+  # A playlist that points to a directory (all files in alphabetical order)
+  afternoon_playlist:
+    directory: "music/afternoon"
+
+  # A single song as a playlist
+  evening_song:
+    tracks:
+      - "music/evening_track.mp3"
+
+  # Default playlist (used when no playlist is scheduled)
+  default:
+    directory: "music"
+
+# Schedules
+schedules:
+  # Schedule by day of week (0 = Monday, 6 = Sunday)
+  - days: [0, 1, 2, 3, 4]  # Weekdays
+    hours: [7, 8, 9, 10, 11]  # Morning hours
+    playlist: "morning_playlist"
+
+  - days: [0, 1, 2, 3, 4]  # Weekdays
+    hours: [12, 13, 14, 15, 16, 17]  # Afternoon hours
+    playlist: "afternoon_playlist"
+
+  - days: [0, 1, 2, 3, 4]  # Weekdays
+    hours: [18, 19, 20, 21, 22, 23]  # Evening hours
+    playlist: "evening_song"
+
+  # Weekend schedule
+  - days: [5, 6]  # Weekend
+    hours: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "afternoon_playlist"
+
+  # Specific date and time range
+  - date: "2023-12-25"  # Christmas
+    hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "christmas_playlist"
+```
+
+#### Playlist Types
+
+You can define playlists in several ways:
+
+1. **Ordered List of Tracks**: Specify an ordered list of paths to audio files.
+   ```yaml
+   playlist_name:
+     tracks:
+       - "path/to/track1.mp3"
+       - "path/to/track2.mp3"
+   ```
+
+2. **Directory-Based**: Point to a directory, and all audio files in that directory will be included in alphabetical order.
+   ```yaml
+   playlist_name:
+     directory: "path/to/directory"
+   ```
+
+3. **Single Song**: A playlist can be as simple as a single song.
+   ```yaml
+   playlist_name:
+     tracks:
+       - "path/to/song.mp3"
+   ```
+
+4. **Default Playlist**: Define a default playlist to use when no playlist is scheduled.
+   ```yaml
+   default:
+     directory: "music"
+   ```
+
+#### Scheduling
+
+You can schedule playlists based on:
+
+1. **Day of Week**: Schedule a playlist for specific days of the week (0 = Monday, 6 = Sunday).
+   ```yaml
+   - days: [0, 1, 2, 3, 4]  # Weekdays
+     hours: [7, 8, 9, 10, 11]  # Morning hours
+     playlist: "morning_playlist"
+   ```
+
+2. **Specific Date**: Schedule a playlist for a specific date.
+   ```yaml
+   - date: "2023-12-25"  # Christmas
+     hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+     playlist: "christmas_playlist"
+   ```
+
+#### Behavior
+
+When presence is detected, the system will:
+
+1. Check the current time to determine which playlist should be active
+2. Play the next track from that playlist
+3. When the track ends, it will automatically play the next track in the playlist
+4. If presence is lost and then detected again, it will continue from the next track in the playlist
 
 ### Running as a Service
 
@@ -167,18 +285,18 @@ To run Crescendo AI as a service that starts automatically on boot:
 
    **If you installed with pip:**
    ```
-   [Unit]
-   Description=Crescendo AI Music System
-   After=network.target
+    [Unit]
+    Description=Crescendo AI Music System
+    After=network.target
 
-   [Service]
-   User=pi
-   WorkingDirectory=/home/pi/crescendo-ai
-   ExecStart=/usr/bin/python3 /home/pi/crescendo-ai/crescendo.py
-   Restart=on-failure
+    [Service]
+    User=pi
+    WorkingDirectory=/home/pi/crescendo-ai
+    ExecStart=/usr/bin/python3 /home/pi/crescendo-ai/crescendo.py
+    Restart=on-failure
 
-   [Install]
-   WantedBy=multi-user.target
+    [Install]
+    WantedBy=multi-user.target
    ```
 
 3. Enable and start the service:
