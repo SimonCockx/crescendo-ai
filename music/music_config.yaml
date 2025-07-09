@@ -1,48 +1,103 @@
 # Crescendo AI Music Configuration
 
-# Playlists
+# Playlists - Each folder is defined as a playlist
 playlists:
-  # A playlist with a name and an ordered list of paths to audio files
-  morning_playlist:
-    tracks:
-      - "music/track1.mp3"
-      - "music/track2.mp3"
-      - "music/track3.mp3"
-  
-  # A playlist that points to a directory (all files in alphabetical order)
-  afternoon_playlist:
-    directory: "music/afternoon"
-  
-  # A single song as a playlist
-  evening_song:
-    tracks:
-      - "music/evening_track.mp3"
-  
+  # Kamp playlists defined by directory
+  kamp_hiphop:
+    directory: "Kamp Hiphop"
+
+  kamp_jazz:
+    directory: "Kamp Jazz"
+
+  kamp_klassiek:
+    directory: "Kamp Klassiek"
+
+  kamp_margi:
+    directory: "Kamp Margi"
+
+  kamp_rock_00s:
+    directory: "Kamp Rock 00s"
+
+  kamp_rock_70_80s:
+    directory: "Kamp Rock 70-80s"
+
+  kamp_rock_90s:
+    directory: "Kamp Rock 90s"
+
+  kamp_rock_oldies:
+    directory: "Kamp Rock oldies"
+
+  kamp_reggae:
+    directory: "Kamp reggae"
+
   # Default playlist (used when no playlist is scheduled)
   default:
-    directory: "music"
+    directory: "."
 
-# Schedules
+# Schedules - Each playlist plays for one day from 6am to 6am the next day
 schedules:
-  # Schedule by day of week (0 = Monday, 6 = Sunday)
-  - days: [0, 1, 2, 3, 4]  # Weekdays
-    hours: [7, 8, 9, 10, 11]  # Morning hours
-    playlist: "morning_playlist"
-  
-  - days: [0, 1, 2, 3, 4]  # Weekdays
-    hours: [12, 13, 14, 15, 16, 17]  # Afternoon hours
-    playlist: "afternoon_playlist"
-  
-  - days: [0, 1, 2, 3, 4]  # Weekdays
-    hours: [18, 19, 20, 21, 22, 23]  # Evening hours
-    playlist: "evening_song"
-  
-  # Weekend schedule
-  - days: [5, 6]  # Weekend
-    hours: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
-    playlist: "afternoon_playlist"
-  
-  # Specific date and time range
-  - date: "2023-12-25"  # Christmas
-    hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
-    playlist: "christmas_playlist"
+  # July 11, 2025 - Kamp Hiphop (starting at midnight)
+  - date: "2025-07-11"
+    hours: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_hiphop"
+
+  # July 12, 2025 - Kamp Jazz (6am to 6am next day)
+  - date: "2025-07-12"
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_jazz"
+  - date: "2025-07-13"
+    hours: [0, 1, 2, 3, 4, 5]
+    playlist: "kamp_jazz"
+
+  # July 13, 2025 - Kamp Klassiek (6am to 6am next day)
+  - date: "2025-07-13"
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_klassiek"
+  - date: "2025-07-14"
+    hours: [0, 1, 2, 3, 4, 5]
+    playlist: "kamp_klassiek"
+
+  # July 14, 2025 - Kamp Margi (6am to 6am next day)
+  - date: "2025-07-14"
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_margi"
+  - date: "2025-07-15"
+    hours: [0, 1, 2, 3, 4, 5]
+    playlist: "kamp_margi"
+
+  # July 15, 2025 - Kamp Rock 00s (6am to 6am next day)
+  - date: "2025-07-15"
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_rock_00s"
+  - date: "2025-07-16"
+    hours: [0, 1, 2, 3, 4, 5]
+    playlist: "kamp_rock_00s"
+
+  # July 16, 2025 - Kamp Rock 70-80s (6am to 6am next day)
+  - date: "2025-07-16"
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_rock_70_80s"
+  - date: "2025-07-17"
+    hours: [0, 1, 2, 3, 4, 5]
+    playlist: "kamp_rock_70_80s"
+
+  # July 17, 2025 - Kamp Rock 90s (6am to 6am next day)
+  - date: "2025-07-17"
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_rock_90s"
+  - date: "2025-07-18"
+    hours: [0, 1, 2, 3, 4, 5]
+    playlist: "kamp_rock_90s"
+
+  # July 18, 2025 - Kamp Rock oldies (6am to 6am next day)
+  - date: "2025-07-18"
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_rock_oldies"
+  - date: "2025-07-19"
+    hours: [0, 1, 2, 3, 4, 5]
+    playlist: "kamp_rock_oldies"
+
+  # July 19, 2025 - Kamp reggae (6am to 6am next day)
+  - date: "2025-07-19"
+    hours: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    playlist: "kamp_reggae"
