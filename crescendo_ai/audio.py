@@ -175,7 +175,7 @@ class AudioPlayer:
             logger.info(f"Playing track: {os.path.basename(track_path)}")
 
             # Set up an event to detect when the song ends
-            pygame.mixer.music.set_endevent(MUSIC_END)
+            pygame.mixer.music.set_endevent(pygame.USEREVENT)
 
             return True
         except pygame.error as e:
