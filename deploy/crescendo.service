@@ -19,6 +19,11 @@ RestartSec=5
 StartLimitIntervalSec=0
 
 Environment=PYTHONUNBUFFERED=1
+# Needed for audio output (PulseAudio/ALSA look for the user session's
+# runtime dir here) - without it, pygame's mixer can fail to find an
+# audio sink under this system-level service. Adjust the UID (1000) if
+# the service User= above has a different one.
+Environment=XDG_RUNTIME_DIR=/run/user/1000
 
 [Install]
 WantedBy=multi-user.target
