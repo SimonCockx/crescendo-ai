@@ -229,8 +229,10 @@ class AudioPlayer:
             logger.error("Cannot play next track: Audio player not initialized")
             return False
 
-        # Try to get the current scheduled playlist
-        if self.music_config:
+        # Try to get the current scheduled playlist, unless an explicit
+        # playlist was selected via play_playlist() - keep playing that one
+        # instead of silently switching back to the schedule.
+        if self.music_config and not self._explicit_playlist:
             self._current_playlist = self.music_config.get_current_playlist()
 
         # If still no playlist, we can't play the next track

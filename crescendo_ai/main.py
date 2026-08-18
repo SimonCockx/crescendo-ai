@@ -248,15 +248,6 @@ class CrescendoSystem:
             # debounce, so presence can persist for up to their sum after someone leaves.
             static_detected = self.last_static_detection_time is not None and (current_time - self.last_static_detection_time <= self.static_detection_hold_time)
 
-            # Reset dynamic detection if no static target is detected (including the hold period)
-            if not static_detected:
-                # Only log if this is a change from the previous state
-                if self.dynamic_detection_active_until is not None:
-                    logger.debug("Resetting dynamic detection because no static target is detected")
-                self.dynamic_detection_history = []
-                self.dynamic_detection_active_until = None
-                dynamic_detection_active = False
-
             # Update previous dynamic detection state
             if dynamic_detection_active != self.prev_dynamic_detection_active:
                 self.prev_dynamic_detection_active = dynamic_detection_active
@@ -323,13 +314,26 @@ class CrescendoSystem:
                     # Stop music
                     self.audio_player.stop()
 
-                relay_timeout_is_complete = (self.last_presence_time is not None and 
+                relay_timeout_is_complete = (self.last_presence_time is not None and
                                            current_time - self.last_presence_time > self.relay_off_delay)
 
                 # Turn off the relay (speaker power) after the delay
                 if self.relay.is_connected() and self.relay.is_turned_on() and relay_timeout_is_complete:
                     logger.info(f"Turning off relay after {int(self.relay_off_delay/60)} minutes of no presence")
                     self.relay.turn_off()
+
+            # Reset dynamic detection if no static target is detected (including the hold period).
+            # This is placed at the end (rather than right after computing static_detected) to
+            # match the original logic: dynamic_detection_active/prev_dynamic_detection_active
+            # above already reflect this cycle's real sensor state, so PRESENCE LOST logging
+            # attributes the loss correctly; only the internal history/timer used by *future*
+            # cycles is cleared here.
+            if not static_detected:
+                # Only log if this is a change from the previous state
+                if self.dynamic_detection_active_until is not None:
+                    logger.debug("Resetting dynamic detection because no static target is detected")
+                self.dynamic_detection_history = []
+                self.dynamic_detection_active_until = None
 
         except Exception as e:
             logger.error(f"Error checking presence: {e}")
