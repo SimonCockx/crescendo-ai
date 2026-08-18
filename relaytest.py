@@ -4,6 +4,12 @@ import time
 VENDOR_ID = 0x16c0
 PRODUCT_ID = 0x05df
 
+def print_devices():
+    print("Listing devices...")
+    for d in hid.enumerate():
+        print("Found device:", d)
+    print("End of list")
+
 def open_relay_device():
     device = hid.Device(vid=VENDOR_ID, pid=PRODUCT_ID)
     return device
@@ -17,6 +23,7 @@ def relay_off(device):
     device.write(bytes([0x00, 0xFD, 0x01]))
 
 def main():
+    print_devices()
     print("Connecting to relay...")
     try:
         device = open_relay_device()
