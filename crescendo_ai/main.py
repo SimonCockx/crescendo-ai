@@ -283,12 +283,10 @@ class CrescendoSystem:
                     self.relay.turn_on()
 
                 if not self.audio_player.is_playing():
+                    # Either presence just started, or the previous track finished -
+                    # play() advances to the next playlist track when one is set
                     logger.info("Robust presence detected - starting music")
-                    # Start playing music using the configured playlist system
                     self.audio_player.play()
-                else:
-                    # Check if the current track has ended and play the next track if needed
-                    self.audio_player.check_for_track_end()
 
                 # Update previous presence state
                 self.prev_presence_detected = True
