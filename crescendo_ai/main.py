@@ -70,8 +70,12 @@ class CrescendoSystem:
         self.dynamic_detection_history = []  # List of timestamps when dynamic motion was detected
         self.dynamic_detection_active_until = None  # Timestamp until dynamic detection is considered active
         self.dynamic_detection_duration = 300  # Duration in seconds (5 minutes) to keep dynamic detection active
+        self.dynamic_detection_window = 2.0  # Seconds of history to consider for continuous motion
+        self.dynamic_detection_count_threshold = 2  # Minimum detections within the window to count as continuous
 
-        self.static_detection_time_fix = 25
+        # Static detection is held active for this many seconds after the sensor
+        # last reported it, so brief sensor dropouts don't reset dynamic detection
+        self.static_detection_hold_time = 25
         self.last_static_detection_time = None
 
         # State tracking for logging
@@ -179,23 +183,22 @@ class CrescendoSystem:
             if dynamic_detected:
                 self.dynamic_detection_history.append(current_time)
 
-            # Remove entries older than 3 seconds from history
-            dynamic_detection_time = 2.0
-            self.dynamic_detection_history = [t for t in self.dynamic_detection_history 
-                                             if current_time - t <= dynamic_detection_time]
+            # Remove entries older than the detection window from history
+            self.dynamic_detection_history = [t for t in self.dynamic_detection_history
+                                             if current_time - t <= self.dynamic_detection_window]
 
-            # Check if we have continuous dynamic detection for 3 seconds
+            # Check if we have enough dynamic detections within the window
             dynamic_detection_active = False
-            continuous_detection = len(self.dynamic_detection_history) >= dynamic_detection_time
+            continuous_detection = len(self.dynamic_detection_history) >= self.dynamic_detection_count_threshold
 
             if continuous_detection:
-                # If we have at least 3 detections in the last 3 seconds, activate dynamic detection
+                # If we have enough detections within the window, activate dynamic detection
                 dynamic_detection_active = True
                 # Set the dynamic detection to be active for the next 5 minutes
                 self.dynamic_detection_active_until = current_time + self.dynamic_detection_duration
                 # Log only if this is a new continuous detection
                 if not self.prev_continuous_detection:
-                    logger.debug(f"Dynamic detection activated: continuous motion detected for {dynamic_detection_time}+ seconds (active until {time.ctime(self.dynamic_detection_active_until)})")
+                    logger.debug(f"Dynamic detection activated: {self.dynamic_detection_count_threshold}+ detections within {self.dynamic_detection_window}s (active until {time.ctime(self.dynamic_detection_active_until)})")
                     self.prev_continuous_detection = True
             elif self.dynamic_detection_active_until and current_time < self.dynamic_detection_active_until:
                 # Dynamic detection is still active from a previous detection
@@ -212,7 +215,7 @@ class CrescendoSystem:
             if static_detected_direct:
                 self.last_static_detection_time = current_time
 
-            static_detected = self.last_static_detection_time is not None and (current_time - self.last_static_detection_time <= self.static_detection_time_fix)
+            static_detected = self.last_static_detection_time is not None and (current_time - self.last_static_detection_time <= self.static_detection_hold_time)
 
             # Update previous dynamic detection state
             if dynamic_detection_active != self.prev_dynamic_detection_active:
@@ -294,7 +297,6 @@ class CrescendoSystem:
                     logger.debug("Resetting dynamic detection because no static target is detected")
                 self.dynamic_detection_history = []
                 self.dynamic_detection_active_until = None
-                dynamic_detection_active = False
 
         except Exception as e:
             logger.error(f"Error checking presence: {e}")
