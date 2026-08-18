@@ -38,6 +38,7 @@ class AudioPlayer:
         self._current_track: Optional[str] = None
         self._is_playing = False
         self._current_playlist: Optional[Playlist] = None
+        self._explicit_playlist = False  # True once play_playlist() is used, so play_next_track() doesn't override it with the schedule
 
         # Set default config path if not provided
         if config_path is None:
@@ -206,6 +207,7 @@ class AudioPlayer:
             return False
 
         self._current_playlist = playlist
+        self._explicit_playlist = True
         logger.info(f"Playing playlist: {playlist_name}")
 
         # Play the first track in the playlist

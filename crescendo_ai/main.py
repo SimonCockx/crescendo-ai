@@ -215,7 +215,20 @@ class CrescendoSystem:
             if static_detected_direct:
                 self.last_static_detection_time = current_time
 
+            # Static detection is held active for static_detection_hold_time seconds after
+            # the sensor last reported it, so brief sensor dropouts don't reset dynamic
+            # detection. Note this hold time stacks with the sensor's own no_one_duration
+            # debounce, so presence can persist for up to their sum after someone leaves.
             static_detected = self.last_static_detection_time is not None and (current_time - self.last_static_detection_time <= self.static_detection_hold_time)
+
+            # Reset dynamic detection if no static target is detected (including the hold period)
+            if not static_detected:
+                # Only log if this is a change from the previous state
+                if self.dynamic_detection_active_until is not None:
+                    logger.debug("Resetting dynamic detection because no static target is detected")
+                self.dynamic_detection_history = []
+                self.dynamic_detection_active_until = None
+                dynamic_detection_active = False
 
             # Update previous dynamic detection state
             if dynamic_detection_active != self.prev_dynamic_detection_active:
@@ -224,7 +237,8 @@ class CrescendoSystem:
             # Log static detection status only if it changed
             if static_detected != self.prev_static_detected:
                 if static_detected:
-                    logger.debug(f"Static target detected: energy level {self.sensor.get_static_energy()}")
+                    source = "live" if static_detected_direct else "held from grace period"
+                    logger.debug(f"Static target detected ({source}): energy level {self.sensor.get_static_energy()}")
                 else:
                     logger.debug(f"No static target detected")
                 self.prev_static_detected = static_detected
@@ -241,7 +255,7 @@ class CrescendoSystem:
                 # Log detailed presence detection information
                 if not self.prev_presence_detected:
                     logger.info("PRESENCE DETECTED: Both conditions met for robust detection")
-                    logger.info(f"  - Dynamic detection: {'Continuous motion for 3+ seconds' if continuous_detection else 'Within 5-minute window'}")
+                    logger.info(f"  - Dynamic detection: {f'{self.dynamic_detection_count_threshold}+ detections within {self.dynamic_detection_window}s' if continuous_detection else 'Within 5-minute window'}")
                     logger.info(f"  - Static detection: Energy level {self.sensor.get_static_energy()}")
 
                 # If music is not playing, turn on relay and start music
@@ -289,14 +303,6 @@ class CrescendoSystem:
                 if self.relay.is_connected() and self.relay.is_turned_on() and relay_timeout_is_complete:
                     logger.info(f"Turning off relay after {int(self.relay_off_delay/60)} minutes of no presence")
                     self.relay.turn_off()
-
-            # Reset dynamic detection if no static target is detected
-            if not static_detected:
-                # Only log if this is a change from the previous state
-                if self.dynamic_detection_active_until is not None:
-                    logger.debug("Resetting dynamic detection because no static target is detected")
-                self.dynamic_detection_history = []
-                self.dynamic_detection_active_until = None
 
         except Exception as e:
             logger.error(f"Error checking presence: {e}")
