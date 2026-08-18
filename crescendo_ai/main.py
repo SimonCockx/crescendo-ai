@@ -11,24 +11,40 @@ when no presence is detected.
 """
 
 import logging
+import logging.handlers
 import time
 import os
 
 from crescendo_ai.sensor import PresenceSensor
 from crescendo_ai.relay import USBRelay
 from crescendo_ai.audio import AudioPlayer
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('crescendo.log')
-    ]
-)
+from crescendo_ai.systemd_notify import notify
 
 logger = logging.getLogger(__name__)
+
+
+def configure_logging(level: str = 'INFO', log_file: str = 'crescendo.log') -> None:
+    """
+    Configure application-wide logging.
+
+    Uses a rotating file handler so a long unattended run can't fill up the
+    disk (capped at ~50MB across 5 rotated files) instead of the previous
+    unbounded log file.
+
+    Args:
+        level: Logging level name (e.g. 'DEBUG', 'INFO', 'WARNING')
+        log_file: Path to the log file
+    """
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.handlers.RotatingFileHandler(
+                log_file, maxBytes=10 * 1024 * 1024, backupCount=5
+            ),
+        ]
+    )
 
 class CrescendoSystem:
     """Main class that coordinates all components of the Crescendo AI system."""
@@ -153,21 +169,32 @@ class CrescendoSystem:
         self.running = True
         logger.info("Starting Crescendo system main loop")
 
+        notify('READY=1')
+
         try:
             while self.running:
                 self._check_presence_and_update()
+                # Pet the systemd watchdog (no-op unless WatchdogSec is
+                # configured in the unit file), so a truly hung process
+                # gets restarted instead of sitting silently for days.
+                notify('WATCHDOG=1')
                 time.sleep(self.check_interval)
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received")
         except Exception as e:
             logger.error(f"Error in main loop: {e}", exc_info=True)
         finally:
+            notify('STOPPING=1')
             self.shutdown()
 
     def _check_presence_and_update(self) -> None:
         """Check for presence and update system state accordingly using the robust detection algorithm."""
         try:
             current_time = time.time()
+
+            # Retry a dropped relay connection (rate-limited internally)
+            # instead of leaving speaker control dead for the rest of the run
+            self.relay.ensure_connected()
 
             # Check for dynamic (moving) target
             dynamic_detected = self.sensor.is_moving_target_detected()
@@ -303,10 +330,16 @@ def main():
     parser.add_argument('--check-interval', type=float, default=1.0, help='Interval in seconds between presence checks')
     parser.add_argument('--relay-off-delay', type=float, default=15.0 * 60.0, 
                         help='Delay in seconds before turning off the relay after no presence is detected (default: 15 minutes)')
-    parser.add_argument('--config-path', default=None, 
+    parser.add_argument('--config-path', default=None,
                         help='Path to the music configuration file. If not provided, will look for music_config.yaml in the music directory')
+    parser.add_argument('--log-level', default='INFO',
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                        help='Logging level (default: INFO). Use DEBUG for troubleshooting only - '
+                             'it generates a lot of output over a long run.')
 
     args = parser.parse_args()
+
+    configure_logging(level=args.log_level)
 
     # Create and run the system
     system = CrescendoSystem(

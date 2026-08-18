@@ -258,57 +258,50 @@ When presence is detected, the system will:
 
 ### Running as a Service
 
-To run Crescendo AI as a service that starts automatically on boot:
+For an unattended, multi-day deployment, use the unit file in [`deploy/crescendo.service`](deploy/crescendo.service) rather than a bare `Restart=on-failure` one. It differs from a minimal setup in ways that matter for a system nobody can walk up to:
 
-1. Create a systemd service file:
+- `Restart=always` with `StartLimitIntervalSec=0` - systemd's default gives up restarting after 5 crashes in 10 seconds and leaves the service dead. This keeps retrying indefinitely instead.
+- `Type=notify` + `WatchdogSec=90` - the app pings systemd every loop iteration (see `crescendo_ai/systemd_notify.py`). If the process ever hangs instead of crashing, systemd notices the missed pings and restarts it - a plain `Restart=on-failure` only catches actual process exits.
+- `--log-level INFO` - avoids the debug-level logging flood; see [Logging](#logging) below.
+
+1. Copy the service file, adjusting `User=` / paths / `ExecStart` for your install (venv vs. Poetry vs. pip):
    ```bash
-   sudo nano /etc/systemd/system/crescendo.service
+   sudo cp deploy/crescendo.service /etc/systemd/system/crescendo.service
+   sudo nano /etc/systemd/system/crescendo.service  # adjust paths/user if needed
    ```
 
-2. Add the following content (adjust paths as needed):
-
-   **If you installed with Poetry:**
-   ```
-   [Unit]
-   Description=Crescendo AI Music System
-   After=network.target
-
-   [Service]
-   User=pi
-   WorkingDirectory=/home/pi/crescendo-ai
-   ExecStart=/home/pi/.local/bin/poetry run python /home/pi/crescendo-ai/crescendo.py
-   Restart=on-failure
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-   **If you installed with pip:**
-   ```
-    [Unit]
-    Description=Crescendo AI Music System
-    After=network.target
-
-    [Service]
-    User=pi
-    WorkingDirectory=/home/pi/crescendo-ai
-    ExecStart=/usr/bin/python3 /home/pi/crescendo-ai/crescendo.py
-    Restart=on-failure
-
-    [Install]
-    WantedBy=multi-user.target
-   ```
-
-3. Enable and start the service:
+2. Enable and start the service:
    ```bash
+   sudo systemctl daemon-reload
    sudo systemctl enable crescendo.service
    sudo systemctl start crescendo.service
    ```
 
-4. Check the status:
+3. Check the status:
    ```bash
    sudo systemctl status crescendo.service
    ```
+
+### Logging
+
+By default the app logs at `INFO` level to both stdout and a rotating `crescendo.log` file (capped at 5 x 10MB, so a long run can't fill up the SD card). Use `--log-level DEBUG` only for active troubleshooting - at `DEBUG` the presence-detection loop logs multiple lines per second.
+
+### Hardware Watchdog (recommended for field deployments)
+
+The systemd watchdog above catches a hung *application*. To also recover from the OS/kernel itself locking up (e.g. a wedged USB stack) with nobody around to power-cycle the device, enable the Raspberry Pi's hardware watchdog:
+
+1. Enable the watchdog overlay in `/boot/firmware/config.txt`:
+   ```
+   dtparam=watchdog=on
+   ```
+2. Enable systemd's built-in watchdog handling in `/etc/systemd/system.conf`:
+   ```
+   RuntimeWatchdogSec=15
+   RebootWatchdogSec=10min
+   ```
+3. Reboot to apply: `sudo reboot`
+
+With this, systemd (PID 1) pets the hardware watchdog as long as the system is responsive; if the kernel hangs, the Pi reboots itself within ~15 seconds.
 
 ## Troubleshooting
 

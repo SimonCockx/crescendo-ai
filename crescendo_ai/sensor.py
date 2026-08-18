@@ -73,6 +73,13 @@ class PresenceSensor:
         Returns:
             bool: True if connection successful, False otherwise
         """
+        # Close any stale handle before (re)connecting
+        if self._serial and self._serial.is_open:
+            try:
+                self._serial.close()
+            except Exception:
+                pass
+
         try:
             self._serial = serial.Serial(
                 port=self.port,
@@ -127,10 +134,25 @@ class PresenceSensor:
         logger.debug("Stopped sensor read thread")
 
     def _read_thread_func(self) -> None:
-        """Thread function that continuously reads from the sensor."""
-        logger.debug("Sensor read thread started")
+        """Thread function that continuously reads from the sensor.
 
-        while self._thread_running and self.is_connected():
+        Keeps running for as long as the thread is asked to (not just while
+        connected) so a dropped serial connection (USB glitch, power blip)
+        gets retried instead of silently freezing presence detection at its
+        last known state.
+        """
+        logger.debug("Sensor read thread started")
+        reconnect_interval = 5.0
+
+        while self._thread_running:
+            if not self.is_connected():
+                logger.warning(f"Sensor not connected, attempting to reconnect on {self.port}...")
+                if self.connect():
+                    logger.info("Sensor reconnected successfully")
+                else:
+                    time.sleep(reconnect_interval)
+                    continue
+
             try:
                 data = self.read_data()
 
@@ -244,6 +266,13 @@ class PresenceSensor:
             # Return the last successful data or empty dict
             return b'', 0
 
+        except OSError as e:
+            # The underlying device went away (unplugged, USB reset, ...).
+            # Mark disconnected so the read thread notices and reconnects,
+            # instead of silently freezing presence detection.
+            logger.error(f"Sensor I/O error, marking disconnected: {e}")
+            self._is_connected = False
+            return b'', 0
         except Exception as e:
             logger.error(f"Error reading from sensor: {e}")
             return b'', 0
