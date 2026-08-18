@@ -82,6 +82,20 @@ class CrescendoSystem:
         self.running = False
         self.last_presence_time = None
 
+        # Sensor configuration retry state - see initialize() and
+        # _check_presence_and_update() for why this is retried periodically
+        # rather than attempted once
+        self._sensor_config_kwargs = dict(
+            max_motion_gate=8,  # Detect motion up to 6m
+            max_static_gate=8,  # Detect stationary targets up to 6m
+            no_one_duration=10,  # 10 second delay before reporting "no one"
+            motion_sensitivity=[70, 70, 65, 65, 65, 60, 60, 60],  # Per gate
+            static_sensitivity=[70, 70, 60, 55, 50, 45, 45, 45]  # Per gate (0,1 not settable)
+        )
+        self._sensor_configured = False
+        self._last_sensor_config_attempt = 0.0
+        self.sensor_config_retry_interval = 30.0  # Seconds between retry attempts
+
         # Dynamic detection state variables
         self.dynamic_detection_history = []  # List of timestamps when dynamic motion was detected
         self.dynamic_detection_active_until = None  # Timestamp until dynamic detection is considered active
@@ -120,19 +134,19 @@ class CrescendoSystem:
             logger.error("Failed to initialize presence sensor")
             return False
 
-        # Configure sensor with default settings
+        # Configure sensor with our tuned settings. Right after a cold power-on the
+        # sensor can take a while to finish its own warm-up and may not respond
+        # yet - self._sensor_configured tracks whether this actually succeeded,
+        # and _check_presence_and_update() retries it periodically until it does,
+        # so a slow-to-warm-up sensor eventually gets configured on its own
+        # instead of running on its (possibly stale/default) settings forever.
         try:
-            config_ok = self.sensor.configure(
-                max_motion_gate=8,  # Detect motion up to 6m
-                max_static_gate=8,  # Detect stationary targets up to 6m
-                no_one_duration=10,  # 10 second delay before reporting "no one"
-                motion_sensitivity=[70, 70, 65, 65, 65, 60, 60, 60],  # Per gate
-                static_sensitivity=[70, 70, 60, 55, 50, 45, 45, 45]  # Per gate (0,1 not settable)
-            )
-            if not config_ok:
-                logger.warning("Failed to configure sensor - continuing with default configuration")
+            self._sensor_configured = self.sensor.configure(**self._sensor_config_kwargs)
+            if not self._sensor_configured:
+                logger.warning("Failed to configure sensor - will retry periodically, continuing with default configuration for now")
         except Exception as e:
-            logger.warning(f"Error configuring sensor: {e} - continuing with default configuration")
+            self._sensor_configured = False
+            logger.warning(f"Error configuring sensor: {e} - will retry periodically, continuing with default configuration for now")
 
         self.sensor.start_reading()
 
@@ -202,6 +216,21 @@ class CrescendoSystem:
             # Retry a dropped relay connection (rate-limited internally)
             # instead of leaving speaker control dead for the rest of the run
             self.relay.ensure_connected()
+
+            # If the sensor wasn't configured yet (e.g. it was still warming up
+            # right after a cold power-on and didn't respond during
+            # initialize()), keep retrying periodically instead of running on
+            # unconfigured/default settings for the rest of this run
+            if not self._sensor_configured and self.sensor.is_connected():
+                if current_time - self._last_sensor_config_attempt >= self.sensor_config_retry_interval:
+                    self._last_sensor_config_attempt = current_time
+                    logger.info("Retrying sensor configuration...")
+                    try:
+                        self._sensor_configured = self.sensor.configure(**self._sensor_config_kwargs)
+                        if self._sensor_configured:
+                            logger.info("Sensor configuration succeeded on retry")
+                    except Exception as e:
+                        logger.warning(f"Error configuring sensor on retry: {e}")
 
             # Check for dynamic (moving) target
             dynamic_detected = self.sensor.is_moving_target_detected()

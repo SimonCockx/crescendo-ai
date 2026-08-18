@@ -492,15 +492,23 @@ class PresenceSensor:
         """Restart the sensor."""
         if not self.is_connected():
             logger.error("Cannot restart sensor: Not connected")
-        return self._send_command(0x00A3)
+            return False
+        # allow_recovery_retry=False: this recovery command must not trigger
+        # another restart-and-retry cycle on failure, or a sensor that's slow
+        # to respond causes unbounded recursion (restart -> fails -> restart
+        # -> fails -> ...), each round costing a full serial timeout.
+        return self._send_command(0x00A3, allow_recovery_retry=False)
 
-    def _send_command(self, command_word: int, command_data: bytes = b'') -> bool:
+    def _send_command(self, command_word: int, command_data: bytes = b'', allow_recovery_retry: bool = True) -> bool:
         """
         Send a command to the sensor and wait for ACK response.
 
         Args:
             command_word: Command word to send
             command_data: Command data bytes
+            allow_recovery_retry: Whether to attempt a restart-and-retry on the
+                specific "sensor not responding yet" error below. Only restart()
+                sets this False, to avoid recursing into itself.
 
         Returns:
             bool: True if command acknowledged successfully, False otherwise
@@ -557,7 +565,7 @@ class PresenceSensor:
                 return status == 0
 
             except struct.error as e:
-                if "unpack requires a buffer of 2 bytes" in str(e) and not retry_attempted:
+                if allow_recovery_retry and "unpack requires a buffer of 2 bytes" in str(e) and not retry_attempted:
                     logger.warning("Encountered 'unpack requires a buffer of 2 bytes' error. Restarting sensor and retrying...")
                     retry_attempted = True
 
