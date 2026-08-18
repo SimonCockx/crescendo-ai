@@ -91,7 +91,7 @@ class CrescendoSystem:
 
         # Static detection is held active for this many seconds after the sensor
         # last reported it, so brief sensor dropouts don't reset dynamic detection
-        self.static_detection_hold_time = 25
+        self.static_detection_hold_time = 180  # 3 minutes
         self.last_static_detection_time = None
 
         # State tracking for logging
@@ -298,6 +298,8 @@ class CrescendoSystem:
                         logger.info("  - Dynamic detection inactive: No continuous motion and outside 5-minute window")
                     if not static_detected:
                         logger.info("  - Static detection inactive: No stationary target detected")
+                    if self.audio_player.is_playing():
+                        logger.info("  - Letting the current track finish instead of cutting it off")
 
                 # Always update previous presence state when robust presence is not detected
                 self.prev_presence_detected = False
@@ -306,11 +308,9 @@ class CrescendoSystem:
                 if dynamic_detection_active != self.prev_dynamic_detection_active or static_detected != self.prev_static_detected:
                     logger.debug(f"No robust presence - Dynamic: {dynamic_detection_active}, Static: {static_detected}")
 
-                # If no robust presence is detected and music is playing, stop it
-                if self.audio_player.is_playing():
-                    logger.info("No robust presence detected - stopping music")
-                    # Stop music
-                    self.audio_player.stop()
+                # Deliberately not stopping music here: let the current track play out
+                # naturally. The presence-detected branch above only starts a new track
+                # while robust presence is true, so playback just stops once this one ends.
 
                 relay_timeout_is_complete = (self.last_presence_time is not None and
                                            current_time - self.last_presence_time > self.relay_off_delay)
