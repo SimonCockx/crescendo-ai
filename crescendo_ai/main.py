@@ -11,24 +11,40 @@ when no presence is detected.
 """
 
 import logging
+import logging.handlers
 import time
 import os
 
 from crescendo_ai.sensor import PresenceSensor
 from crescendo_ai.relay import USBRelay
 from crescendo_ai.audio import AudioPlayer
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('crescendo.log')
-    ]
-)
+from crescendo_ai.systemd_notify import notify
 
 logger = logging.getLogger(__name__)
+
+
+def configure_logging(level: str = 'INFO', log_file: str = 'crescendo.log') -> None:
+    """
+    Configure application-wide logging.
+
+    Uses a rotating file handler so a long unattended run can't fill up the
+    disk (capped at ~50MB across 5 rotated files) instead of the previous
+    unbounded log file.
+
+    Args:
+        level: Logging level name (e.g. 'DEBUG', 'INFO', 'WARNING')
+        log_file: Path to the log file
+    """
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.handlers.RotatingFileHandler(
+                log_file, maxBytes=10 * 1024 * 1024, backupCount=5
+            ),
+        ]
+    )
 
 class CrescendoSystem:
     """Main class that coordinates all components of the Crescendo AI system."""
@@ -70,8 +86,12 @@ class CrescendoSystem:
         self.dynamic_detection_history = []  # List of timestamps when dynamic motion was detected
         self.dynamic_detection_active_until = None  # Timestamp until dynamic detection is considered active
         self.dynamic_detection_duration = 300  # Duration in seconds (5 minutes) to keep dynamic detection active
+        self.dynamic_detection_window = 2.0  # Seconds of history to consider for continuous motion
+        self.dynamic_detection_count_threshold = 2  # Minimum detections within the window to count as continuous
 
-        self.static_detection_time_fix = 25
+        # Static detection is held active for this many seconds after the sensor
+        # last reported it, so brief sensor dropouts don't reset dynamic detection
+        self.static_detection_hold_time = 25
         self.last_static_detection_time = None
 
         # State tracking for logging
@@ -156,21 +176,32 @@ class CrescendoSystem:
         self.running = True
         logger.info("Starting Crescendo system main loop")
 
+        notify('READY=1')
+
         try:
             while self.running:
                 self._check_presence_and_update()
+                # Pet the systemd watchdog (no-op unless WatchdogSec is
+                # configured in the unit file), so a truly hung process
+                # gets restarted instead of sitting silently for days.
+                notify('WATCHDOG=1')
                 time.sleep(self.check_interval)
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received")
         except Exception as e:
             logger.error(f"Error in main loop: {e}", exc_info=True)
         finally:
+            notify('STOPPING=1')
             self.shutdown()
 
     def _check_presence_and_update(self) -> None:
         """Check for presence and update system state accordingly using the robust detection algorithm."""
         try:
             current_time = time.time()
+
+            # Retry a dropped relay connection (rate-limited internally)
+            # instead of leaving speaker control dead for the rest of the run
+            self.relay.ensure_connected()
 
             # Check for dynamic (moving) target
             dynamic_detected = self.sensor.is_moving_target_detected()
@@ -179,23 +210,22 @@ class CrescendoSystem:
             if dynamic_detected:
                 self.dynamic_detection_history.append(current_time)
 
-            # Remove entries older than 3 seconds from history
-            dynamic_detection_time = 2.0
-            self.dynamic_detection_history = [t for t in self.dynamic_detection_history 
-                                             if current_time - t <= dynamic_detection_time]
+            # Remove entries older than the detection window from history
+            self.dynamic_detection_history = [t for t in self.dynamic_detection_history
+                                             if current_time - t <= self.dynamic_detection_window]
 
-            # Check if we have continuous dynamic detection for 3 seconds
+            # Check if we have enough dynamic detections within the window
             dynamic_detection_active = False
-            continuous_detection = len(self.dynamic_detection_history) >= dynamic_detection_time
+            continuous_detection = len(self.dynamic_detection_history) >= self.dynamic_detection_count_threshold
 
             if continuous_detection:
-                # If we have at least 3 detections in the last 3 seconds, activate dynamic detection
+                # If we have enough detections within the window, activate dynamic detection
                 dynamic_detection_active = True
                 # Set the dynamic detection to be active for the next 5 minutes
                 self.dynamic_detection_active_until = current_time + self.dynamic_detection_duration
                 # Log only if this is a new continuous detection
                 if not self.prev_continuous_detection:
-                    logger.debug(f"Dynamic detection activated: continuous motion detected for {dynamic_detection_time}+ seconds (active until {time.ctime(self.dynamic_detection_active_until)})")
+                    logger.debug(f"Dynamic detection activated: {self.dynamic_detection_count_threshold}+ detections within {self.dynamic_detection_window}s (active until {time.ctime(self.dynamic_detection_active_until)})")
                     self.prev_continuous_detection = True
             elif self.dynamic_detection_active_until and current_time < self.dynamic_detection_active_until:
                 # Dynamic detection is still active from a previous detection
@@ -212,7 +242,11 @@ class CrescendoSystem:
             if static_detected_direct:
                 self.last_static_detection_time = current_time
 
-            static_detected = self.last_static_detection_time is not None and (current_time - self.last_static_detection_time <= self.static_detection_time_fix)
+            # Static detection is held active for static_detection_hold_time seconds after
+            # the sensor last reported it, so brief sensor dropouts don't reset dynamic
+            # detection. Note this hold time stacks with the sensor's own no_one_duration
+            # debounce, so presence can persist for up to their sum after someone leaves.
+            static_detected = self.last_static_detection_time is not None and (current_time - self.last_static_detection_time <= self.static_detection_hold_time)
 
             # Update previous dynamic detection state
             if dynamic_detection_active != self.prev_dynamic_detection_active:
@@ -221,7 +255,8 @@ class CrescendoSystem:
             # Log static detection status only if it changed
             if static_detected != self.prev_static_detected:
                 if static_detected:
-                    logger.debug(f"Static target detected: energy level {self.sensor.get_static_energy()}")
+                    source = "live" if static_detected_direct else "held from grace period"
+                    logger.debug(f"Static target detected ({source}): energy level {self.sensor.get_static_energy()}")
                 else:
                     logger.debug(f"No static target detected")
                 self.prev_static_detected = static_detected
@@ -238,7 +273,7 @@ class CrescendoSystem:
                 # Log detailed presence detection information
                 if not self.prev_presence_detected:
                     logger.info("PRESENCE DETECTED: Both conditions met for robust detection")
-                    logger.info(f"  - Dynamic detection: {'Continuous motion for 3+ seconds' if continuous_detection else 'Within 5-minute window'}")
+                    logger.info(f"  - Dynamic detection: {f'{self.dynamic_detection_count_threshold}+ detections within {self.dynamic_detection_window}s' if continuous_detection else 'Within 5-minute window'}")
                     logger.info(f"  - Static detection: Energy level {self.sensor.get_static_energy()}")
 
                 # If music is not playing, turn on relay and start music
@@ -248,12 +283,10 @@ class CrescendoSystem:
                     self.relay.turn_on()
 
                 if not self.audio_player.is_playing():
+                    # Either presence just started, or the previous track finished -
+                    # play() advances to the next playlist track when one is set
                     logger.info("Robust presence detected - starting music")
-                    # Start playing music using the configured playlist system
                     self.audio_player.play()
-                else:
-                    # Check if the current track has ended and play the next track if needed
-                    self.audio_player.check_for_track_end()
 
                 # Update previous presence state
                 self.prev_presence_detected = True
@@ -279,7 +312,7 @@ class CrescendoSystem:
                     # Stop music
                     self.audio_player.stop()
 
-                relay_timeout_is_complete = (self.last_presence_time is not None and 
+                relay_timeout_is_complete = (self.last_presence_time is not None and
                                            current_time - self.last_presence_time > self.relay_off_delay)
 
                 # Turn off the relay (speaker power) after the delay
@@ -287,14 +320,18 @@ class CrescendoSystem:
                     logger.info(f"Turning off relay after {int(self.relay_off_delay/60)} minutes of no presence")
                     self.relay.turn_off()
 
-            # Reset dynamic detection if no static target is detected
+            # Reset dynamic detection if no static target is detected (including the hold period).
+            # This is placed at the end (rather than right after computing static_detected) to
+            # match the original logic: dynamic_detection_active/prev_dynamic_detection_active
+            # above already reflect this cycle's real sensor state, so PRESENCE LOST logging
+            # attributes the loss correctly; only the internal history/timer used by *future*
+            # cycles is cleared here.
             if not static_detected:
                 # Only log if this is a change from the previous state
                 if self.dynamic_detection_active_until is not None:
                     logger.debug("Resetting dynamic detection because no static target is detected")
                 self.dynamic_detection_history = []
                 self.dynamic_detection_active_until = None
-                dynamic_detection_active = False
 
         except Exception as e:
             logger.error(f"Error checking presence: {e}")
@@ -311,10 +348,16 @@ def main():
     parser.add_argument('--check-interval', type=float, default=1.0, help='Interval in seconds between presence checks')
     parser.add_argument('--relay-off-delay', type=float, default=15.0 * 60.0, 
                         help='Delay in seconds before turning off the relay after no presence is detected (default: 15 minutes)')
-    parser.add_argument('--config-path', default=None, 
+    parser.add_argument('--config-path', default=None,
                         help='Path to the music configuration file. If not provided, will look for music_config.yaml in the music directory')
+    parser.add_argument('--log-level', default='INFO',
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                        help='Logging level (default: INFO). Use DEBUG for troubleshooting only - '
+                             'it generates a lot of output over a long run.')
 
     args = parser.parse_args()
+
+    configure_logging(level=args.log_level)
 
     # Create and run the system
     system = CrescendoSystem(

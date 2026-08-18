@@ -20,8 +20,6 @@ from crescendo_ai.config import MusicConfig, Playlist, load_music_config
 
 logger = logging.getLogger(__name__)
 
-MUSIC_END = pygame.USEREVENT + 1
-
 class AudioPlayer:
     """Class to handle audio playback with playlist and scheduling support."""
 
@@ -38,6 +36,7 @@ class AudioPlayer:
         self._current_track: Optional[str] = None
         self._is_playing = False
         self._current_playlist: Optional[Playlist] = None
+        self._explicit_playlist = False  # True once play_playlist() is used, so play_next_track() doesn't override it with the schedule
 
         # Set default config path if not provided
         if config_path is None:
@@ -59,7 +58,6 @@ class AudioPlayer:
             pygame.init()
             # Initialize the mixer specifically for audio
             pygame.mixer.init()
-            pygame.mixer.music.set_endevent(MUSIC_END)
             self._is_initialized = True
             logger.info("Audio player initialized")
 
@@ -174,9 +172,6 @@ class AudioPlayer:
             self._is_playing = True
             logger.info(f"Playing track: {os.path.basename(track_path)}")
 
-            # Set up an event to detect when the song ends
-            pygame.mixer.music.set_endevent(pygame.USEREVENT)
-
             return True
         except pygame.error as e:
             logger.error(f"Error playing track: {e}")
@@ -206,6 +201,7 @@ class AudioPlayer:
             return False
 
         self._current_playlist = playlist
+        self._explicit_playlist = True
         logger.info(f"Playing playlist: {playlist_name}")
 
         # Play the first track in the playlist
@@ -227,8 +223,10 @@ class AudioPlayer:
             logger.error("Cannot play next track: Audio player not initialized")
             return False
 
-        # Try to get the current scheduled playlist
-        if self.music_config:
+        # Try to get the current scheduled playlist, unless an explicit
+        # playlist was selected via play_playlist() - keep playing that one
+        # instead of silently switching back to the schedule.
+        if self.music_config and not self._explicit_playlist:
             self._current_playlist = self.music_config.get_current_playlist()
 
         # If still no playlist, we can't play the next track
@@ -242,31 +240,6 @@ class AudioPlayer:
             return False
 
         return self.play(next_track)
-
-    def check_for_track_end(self) -> None:
-        """
-        Check if the current track has ended and play the next track if needed.
-        This should be called regularly from the main loop.
-        """
-        if not self._is_initialized or not self._is_playing:
-            return
-
-        try:
-            # Check for the end-of-track event
-            for event in pygame.event.get():
-                if event.type == MUSIC_END:
-                    logger.debug("Track ended, playing next track")
-                    self.play_next_track()
-        except Exception as e:
-            logger.error(f"Error checking for track end: {e}")
-            # If we get a "video system not initialized" error, try to reinitialize pygame
-            if "video system not initialized" in str(e):
-                logger.warning("Attempting to reinitialize pygame...")
-                try:
-                    pygame.init()
-                    logger.info("Successfully reinitialized pygame")
-                except Exception as reinit_error:
-                    logger.error(f"Failed to reinitialize pygame: {reinit_error}")
 
     def stop(self) -> bool:
         """

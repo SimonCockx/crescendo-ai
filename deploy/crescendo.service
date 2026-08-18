@@ -1,0 +1,24 @@
+[Unit]
+Description=Crescendo AI Music System
+After=network.target sound.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+WatchdogSec=90
+TimeoutStartSec=60
+User=simoncockx
+WorkingDirectory=/home/simoncockx/crescendo-ai
+ExecStart=/home/simoncockx/crescendo-ai/venv/bin/python /home/simoncockx/crescendo-ai/crescendo.py --log-level INFO
+
+# Always restart, no matter how often it fails or how quickly - for an
+# unattended multi-day deployment, "keep trying" beats "give up after 5
+# crashes in 10 seconds" (systemd's default StartLimitBurst).
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
