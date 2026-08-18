@@ -20,6 +20,8 @@ from crescendo_ai.config import MusicConfig, Playlist, load_music_config
 
 logger = logging.getLogger(__name__)
 
+MUSIC_END = pygame.USEREVENT + 1
+
 class AudioPlayer:
     """Class to handle audio playback with playlist and scheduling support."""
 
@@ -57,6 +59,7 @@ class AudioPlayer:
             pygame.init()
             # Initialize the mixer specifically for audio
             pygame.mixer.init()
+            pygame.mixer.music.set_endevent(MUSIC_END)
             self._is_initialized = True
             logger.info("Audio player initialized")
 
@@ -224,15 +227,14 @@ class AudioPlayer:
             logger.error("Cannot play next track: Audio player not initialized")
             return False
 
-        if not self._current_playlist:
-            # If no current playlist but we have a configuration, try to get the current scheduled playlist
-            if self.music_config:
-                self._current_playlist = self.music_config.get_current_playlist()
+        # Try to get the current scheduled playlist
+        if self.music_config:
+            self._current_playlist = self.music_config.get_current_playlist()
 
-            # If still no playlist, we can't play the next track
-            if not self._current_playlist:
-                logger.error("Cannot play next track: No current playlist")
-                return False
+        # If still no playlist, we can't play the next track
+        if not self._current_playlist:
+            logger.error("Cannot play next track: No current playlist")
+            return False
 
         next_track = self._current_playlist.get_next_track(self.music_dir)
         if not next_track:
@@ -252,7 +254,7 @@ class AudioPlayer:
         try:
             # Check for the end-of-track event
             for event in pygame.event.get():
-                if event.type == pygame.USEREVENT:
+                if event.type == MUSIC_END:
                     logger.debug("Track ended, playing next track")
                     self.play_next_track()
         except Exception as e:

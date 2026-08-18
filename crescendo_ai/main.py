@@ -71,6 +71,9 @@ class CrescendoSystem:
         self.dynamic_detection_active_until = None  # Timestamp until dynamic detection is considered active
         self.dynamic_detection_duration = 300  # Duration in seconds (5 minutes) to keep dynamic detection active
 
+        self.static_detection_time_fix = 25
+        self.last_static_detection_time = None
+
         # State tracking for logging
         self.prev_dynamic_detection_active = False
         self.prev_static_detected = False
@@ -103,8 +106,8 @@ class CrescendoSystem:
                 max_motion_gate=8,  # Detect motion up to 6m
                 max_static_gate=8,  # Detect stationary targets up to 6m
                 no_one_duration=10,  # 10 second delay before reporting "no one"
-                motion_sensitivity=[80, 80, 75, 75, 75, 70, 70, 70],  # Per gate
-                static_sensitivity=[80, 80, 75, 75, 75, 70, 70, 70]  # Per gate (0,1 not settable)
+                motion_sensitivity=[70, 70, 65, 65, 65, 60, 60, 60],  # Per gate
+                static_sensitivity=[70, 70, 60, 55, 50, 45, 45, 45]  # Per gate (0,1 not settable)
             )
             if not config_ok:
                 logger.warning("Failed to configure sensor - continuing with default configuration")
@@ -177,12 +180,13 @@ class CrescendoSystem:
                 self.dynamic_detection_history.append(current_time)
 
             # Remove entries older than 3 seconds from history
+            dynamic_detection_time = 2.0
             self.dynamic_detection_history = [t for t in self.dynamic_detection_history 
-                                             if current_time - t <= 3.0]
+                                             if current_time - t <= dynamic_detection_time]
 
             # Check if we have continuous dynamic detection for 3 seconds
             dynamic_detection_active = False
-            continuous_detection = len(self.dynamic_detection_history) >= 3
+            continuous_detection = len(self.dynamic_detection_history) >= dynamic_detection_time
 
             if continuous_detection:
                 # If we have at least 3 detections in the last 3 seconds, activate dynamic detection
@@ -191,7 +195,7 @@ class CrescendoSystem:
                 self.dynamic_detection_active_until = current_time + self.dynamic_detection_duration
                 # Log only if this is a new continuous detection
                 if not self.prev_continuous_detection:
-                    logger.debug(f"Dynamic detection activated: continuous motion detected for 3+ seconds (active until {time.ctime(self.dynamic_detection_active_until)})")
+                    logger.debug(f"Dynamic detection activated: continuous motion detected for {dynamic_detection_time}+ seconds (active until {time.ctime(self.dynamic_detection_active_until)})")
                     self.prev_continuous_detection = True
             elif self.dynamic_detection_active_until and current_time < self.dynamic_detection_active_until:
                 # Dynamic detection is still active from a previous detection
@@ -204,16 +208,11 @@ class CrescendoSystem:
                 self.prev_continuous_detection = False
 
             # Check for static target
-            static_detected = self.sensor.is_static_target_detected()
+            static_detected_direct = self.sensor.is_static_target_detected()
+            if static_detected_direct:
+                self.last_static_detection_time = current_time
 
-            # Reset dynamic detection if no static target is detected
-            if not static_detected:
-                # Only log if this is a change from the previous state
-                if self.dynamic_detection_active_until is not None:
-                    logger.debug("Resetting dynamic detection because no static target is detected")
-                self.dynamic_detection_history = []
-                self.dynamic_detection_active_until = None
-                dynamic_detection_active = False
+            static_detected = self.last_static_detection_time is not None and (current_time - self.last_static_detection_time <= self.static_detection_time_fix)
 
             # Update previous dynamic detection state
             if dynamic_detection_active != self.prev_dynamic_detection_active:
@@ -287,6 +286,15 @@ class CrescendoSystem:
                 if self.relay.is_connected() and self.relay.is_turned_on() and relay_timeout_is_complete:
                     logger.info(f"Turning off relay after {int(self.relay_off_delay/60)} minutes of no presence")
                     self.relay.turn_off()
+
+            # Reset dynamic detection if no static target is detected
+            if not static_detected:
+                # Only log if this is a change from the previous state
+                if self.dynamic_detection_active_until is not None:
+                    logger.debug("Resetting dynamic detection because no static target is detected")
+                self.dynamic_detection_history = []
+                self.dynamic_detection_active_until = None
+                dynamic_detection_active = False
 
         except Exception as e:
             logger.error(f"Error checking presence: {e}")
