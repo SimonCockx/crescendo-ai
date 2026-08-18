@@ -175,8 +175,32 @@ class AudioPlayer:
             self._is_playing = True
             logger.info(f"Playing track: {os.path.basename(track_path)}")
 
-            # Set up an event to detect when the song ends
-            pygame.mixer.music.set_endevent(MUSIC_END)
+            # Set up an event to detect when the song ends.
+            #
+            # NOTE: this intentionally does NOT match the MUSIC_END id set in
+            # initialize(), so check_for_track_end() never actually matches
+            # anything here - do not "fix" this without reading the full
+            # explanation below.
+            #
+            # pygame.mixer.music.stop() (called just above on every track
+            # switch, not only on natural completion) also posts an end
+            # event. If this used MUSIC_END like initialize() does,
+            # check_for_track_end() would consume that self-inflicted event
+            # on the next poll and immediately advance again, causing a
+            # runaway double-advance that skips/corrupts the playlist order.
+            # Verified empirically: with MUSIC_END used consistently here,
+            # playback order breaks (e.g. track3 -> track2, tracks getting
+            # skipped) within seconds; with this mismatch, playback advances
+            # cleanly and in order.
+            #
+            # Track advancement in production actually happens through a
+            # different, working path: main.py polls is_playing() (i.e.
+            # pygame.mixer.music.get_busy(), independent of this event) and
+            # calls play() again once a track stops, which itself advances
+            # to the next playlist track. check_for_track_end() is
+            # effectively unused as a result - which is safe, since the
+            # polling path already covers it.
+            pygame.mixer.music.set_endevent(pygame.USEREVENT)
 
             return True
         except pygame.error as e:
