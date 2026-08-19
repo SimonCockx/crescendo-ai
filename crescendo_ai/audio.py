@@ -125,34 +125,36 @@ class AudioPlayer:
         if playlist_name is not None:
             return self.play_playlist(playlist_name)
 
-        # If we have a current playlist but no specific track, play the next track from the playlist
-        if self._current_playlist is not None and track_path is None:
-            next_track = self._current_playlist.get_next_track(self.music_dir)
-            if next_track:
-                track_path = next_track
-            else:
-                logger.warning(f"Playlist {self._current_playlist.name} is empty, looking for default track")
-
-        # If no track specified, use the current track or find a default
         if track_path is None:
-            if self._current_track is not None:
-                track_path = self._current_track
-            else:
-                # Try to get a track from the scheduled playlist if available
-                if self.music_config:
-                    current_playlist = self.music_config.get_current_playlist()
-                    if current_playlist:
-                        self._current_playlist = current_playlist
-                        next_track = current_playlist.get_next_track(self.music_dir)
-                        if next_track:
-                            track_path = next_track
+            # Refresh the schedule-selected playlist before advancing (unless
+            # an explicit playlist is active via play_playlist()), so a
+            # schedule boundary crossed while music was playing (e.g. a new
+            # day's playlist) takes effect on the next track instead of
+            # getting stuck on whatever playlist was picked at the last
+            # restart. get_current_playlist() returns the same Playlist
+            # object while the schedule slot is unchanged, so this doesn't
+            # reset track progress within a playlist.
+            if self.music_config and not self._explicit_playlist:
+                scheduled_playlist = self.music_config.get_current_playlist()
+                if scheduled_playlist:
+                    self._current_playlist = scheduled_playlist
 
-                # If still no track, find a default
+            if self._current_playlist is not None:
+                next_track = self._current_playlist.get_next_track(self.music_dir)
+                if next_track:
+                    track_path = next_track
+                else:
+                    logger.warning(f"Playlist {self._current_playlist.name} is empty, looking for default track")
+
+            # If still no track, use the last played track or find a default
+            if track_path is None and self._current_track is not None:
+                track_path = self._current_track
+
+            if track_path is None:
+                track_path = self._find_default_track()
                 if track_path is None:
-                    track_path = self._find_default_track()
-                    if track_path is None:
-                        logger.error("No music tracks found in directory")
-                        return False
+                    logger.error("No music tracks found in directory")
+                    return False
 
         # Ensure the track exists
         if not os.path.exists(track_path):
